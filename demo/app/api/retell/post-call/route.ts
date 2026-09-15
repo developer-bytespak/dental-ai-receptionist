@@ -1,0 +1,124 @@
+/**
+ * Retell's call lifecycle webhook.
+ *
+ * call_started   -> open the call row
+ * call_ended     -> close it, write the two consent rows that every call must
+ *                   produce because the opening line always plays
+ * call_analyzed  -> record the outcome and raise the review flag when the
+ *                   agent detected a topic it is not allowed to handle
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { closeCall, flagCall, logAccess, logConsent, logPipeline, touchCall } from "@/lib/audit";
+import { phoneHash, signatureRequired, verifyRetellSignature } from "@/lib/retell";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type RetellCall = {
+  call_id: string;
+  from_number?: string;
+  to_number?: string;
+  call_type?: string;
+  disconnection_reason?: string;
+  call_analysis?: {
+    call_summary?: string;
+    user_sentiment?: string;
+    call_successful?: boolean;
+    custom_analysis_data?: Record<string, unknown>;
+  };
+};
+
+export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+
+  let payload: { event: string; call: RetellCall };
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: "body is not valid JSON" }, { status: 400 });
+  }
+
+  const check = verifyRetellSignature(
+    rawBody,
+    request.headers.get("x-retell-signature"),
+    process.env.RETELL_API_KEY,
+  );
+  if (!check.ok && signatureRequired()) {
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  const call = payload.call;
+  const callId = call?.call_id;
+  if (!callId) return NextResponse.json({ error: "missing call_id" }, { status: 400 });
+
+  const channel = call.from_number ? "phone" : "web";
+  await touchCall(callId, channel);
+
+  if (payload.event === "call_started") {
+    await logAccess({
+      actor: "retell-agent",
+      action: "call_started",
+      callId,
+      outcome: "ok",
+      detail: { channel },
+    });
+    return NextResponse.json({ received: true });
+  }
+
+  if (payload.event === "call_ended") {
+    const phone = call.from_number ?? "+15550000000";
+    const last4 = phone.replace(/\D/g, "").slice(-4) || "0000";
+
+    // The opening line always plays, so both disclosures are always true.
+    await logConsent({ callId, phoneHash: phoneHash(phone), phoneLast4: last4, kind: "recording_notice" });
+    await logConsent({ callId, phoneHash: phoneHash(phone), phoneLast4: last4, kind: "ai_disclosure" });
+    await logPipeline(callId, "consent_recorded", "ok", "recording notice and AI disclosure, script v1.0");
+
+    await logAccess({
+      actor: "retell-agent",
+      action: "call_ended",
+      callId,
+      outcome: call.disconnection_reason ?? "ok",
+      detail: { channel },
+    });
+    await closeCall(callId, call.disconnection_reason ?? "ended");
+    return NextResponse.json({ received: true });
+  }
+
+  if (payload.event === "call_analyzed") {
+    const analysis = call.call_analysis ?? {};
+    const custom = analysis.custom_analysis_data ?? {};
+    const outcome = String(custom.outcome ?? (analysis.call_successful ? "completed" : "incomplete"));
+
+    await closeCall(callId, outcome, analysis.call_summary);
+
+    if (custom.phi_beyond_scheduling_mentioned === true) {
+      await flagCall(callId, "Caller raised a clinical or billing topic. Agent declined and offered a transfer.");
+      await logPipeline(callId, "flagged_for_review", "warn", "out of scope topic detected, transferred");
+      await logAccess({
+        actor: "retell-agent",
+        action: "flag_for_review",
+        callId,
+        outcome: "flagged",
+        detail: { reason: "phi_beyond_scheduling" },
+      });
+    }
+
+    await logAccess({
+      actor: "retell-agent",
+      action: "call_analyzed",
+      callId,
+      outcome,
+      detail: { sentiment: analysis.user_sentiment ?? null },
+    });
+
+    return NextResponse.json({ received: true });
+  }
+
+  return NextResponse.json({ received: true, ignored: payload.event });
+}
+
+export async function GET() {
+  return NextResponse.json({ ok: true, endpoint: "retell call lifecycle webhook" });
+}

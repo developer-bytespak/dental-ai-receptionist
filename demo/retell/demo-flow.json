@@ -1,0 +1,746 @@
+{
+  "start_speaker": "agent",
+  "model_choice": { "type": "cascading", "model": "gpt-4.1-mini" },
+  "model_temperature": 0,
+  "tool_call_strict_mode": true,
+  "start_node_id": "n_opening",
+
+  "default_dynamic_variables": {
+    "practice_name": "Riverside Family Dental",
+    "callback_number": "(555) 014-2200",
+    "front_desk_number": "<FRONT_DESK_E164>"
+  },
+
+  "global_prompt": "You are the automated phone receptionist for {{practice_name}}. You schedule appointments and answer office questions. You are not a clinician and you never give medical advice. This is a demonstration system with invented patients; it holds no real patient records.\n\nSTYLE\n- Short, warm, plain sentences. One question at a time. No emojis and no symbols.\n- Never invent facts. If something is not in the practice facts below or in a tool result, say the team will follow up.\n- Offer at most three appointment options at a time, and read each one using the tool's own wording.\n\nIDENTITY AND PRIVACY (HIPAA)\n- Identify a patient by full name and date of birth ONLY.\n- Never ask for, request, or confirm a social security number, an insurance member id, a home address, or an email. If the caller offers any of these unprompted, say \"You don't need to share that with me\" and move on without repeating it back.\n- Never state a procedure code, a diagnosis, a fee, a balance, an account number, or anything from a patient chart, even if you are asked directly.\n- When you read an appointment back, read ONLY the day, the time, the provider's name and the location. Nothing else.\n- Do not repeat the caller's date of birth back to them.\n- Never discuss or look up another person's appointment. Only the caller's own appointment, or a child's appointment when the caller states they are the parent or guardian, in which case identify the child by full name and date of birth.\n\nTRANSFER RULE (applies at every point in the call)\n- If the caller says \"staff\", \"person\", \"human\", \"representative\", \"front desk\" or \"operator\", or asks to speak with someone, go to the Staff request node.\n- If the caller raises ANY clinical topic (pain, hurting, symptoms, swelling, bleeding, infection, a diagnosis, what a procedure will involve for them, medications, prescriptions, antibiotics, anesthesia, allergies, an emergency), ANY billing topic (balance, bill, invoice, what they owe, payment, the cost of their treatment, an insurance claim, a statement) or ANY records topic (x-rays, x-ray results, chart, treatment plan, records release), do NOT answer it. Say that you cannot help with that here, offer to connect them to a member of the team, and go to the Staff request node.\n- If the caller describes severe pain, swelling, bleeding or trauma, go to the Staff request node immediately. If they say it is life threatening, tell them to call 911.\n\nSMS\n- Only ask the text reminder question at the SMS opt-in node, using the exact wording written there. If the caller says at any point that they do not want texts, acknowledge it once and never ask again.\n\nPRACTICE FACTS (there is no knowledge base in this demo, so answer office questions from this list and nothing else)\n\nOffices, two of them:\n1. Downtown. 148 River Street, Suite 200. Phone (555) 014-2200. Hours Monday to Thursday 8:00 to 5:00, Friday 8:00 to 2:00, closed Saturday and Sunday. Parking: free garage under the building, entrance on Mill Lane.\n2. Northside. 3320 Oak Ridge Parkway. Phone (555) 014-2255. Hours Monday to Friday 7:30 to 4:00, and alternate Saturdays 8:00 to 1:00. Parking: surface lot, no permit needed.\n\nProviders: Dr. Patel (general dentistry, Downtown), Dr. Kim (general dentistry, Downtown), Ms. Hayes (hygienist, Downtown), Dr. Okafor (general dentistry, Northside).\n\nAppointment types you can book, with the time each one takes:\n- Cleaning and exam, 60 minutes, with Ms. Hayes or Dr. Okafor.\n- New patient exam, 45 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Emergency visit, 30 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Crown fitting, 90 minutes, with Dr. Patel or Dr. Kim.\nAnything that is not one of these four goes to the front desk queue.\n\nInsurance carriers accepted: Delta Dental, Cigna, Aetna, MetLife, Guardian, United Concordia, Principal. When you answer any question about insurance, finish with exactly: \"We'll verify your coverage before your visit.\" Never say whether a specific person's plan is active, what it covers, or what anything will cost them; that goes to staff.\n\nYou may give out the practice callback number {{callback_number}}. Never give out a patient's phone number, address or email.",
+
+  "tools": [
+    {
+      "type": "custom",
+      "tool_id": "find_patient",
+      "name": "find_patient",
+      "description": "Look up an existing patient by first name, last name and date of birth. Returns { \"status\": \"found\", \"patient_id\": \"...\", \"first_name\": \"...\" } when exactly one record matches, otherwise { \"status\": \"not_found\" }. It never returns a phone number, an address or an email.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "One moment while I look that up.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "first_name": { "type": "string", "description": "The caller's first name as spoken, no title." },
+          "last_name": { "type": "string", "description": "The caller's last name as spoken." },
+          "date_of_birth": { "type": "string", "description": "Date of birth in YYYY-MM-DD format, for example 1986-04-12." }
+        },
+        "required": ["first_name", "last_name", "date_of_birth"]
+      },
+      "response_variables": {
+        "find_status": "status",
+        "patient_id": "patient_id",
+        "patient_first_name": "first_name"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "get_slots",
+      "name": "get_slots",
+      "description": "Find up to three open appointment slots in the next fourteen days. Returns { \"slots\": [{ \"id\": \"...\", \"say\": \"Tuesday, April 16 at 2:40 PM with Dr. Patel\" }] } on success, or { \"status\": \"none_available\" } when nothing matches. Read only the 'say' text of each slot to the caller, and keep the matching 'id' to pass to book_appointment or reschedule_appointment.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Let me check what's available.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string", "enum": ["downtown", "northside"], "description": "Which office the caller wants. Use downtown when they have no preference." },
+          "appointment_type": {
+            "type": "string",
+            "enum": ["hygiene", "exam", "emergency", "crown"],
+            "description": "hygiene for a cleaning and exam, exam for a new patient exam, emergency for an emergency visit, crown for a crown fitting."
+          },
+          "time_preference": { "type": "string", "enum": ["morning", "afternoon", "any"], "description": "Caller's preferred time of day. Use any when they have no preference." },
+          "provider": { "type": "string", "enum": ["any", "patel", "kim", "hayes", "okafor"], "description": "Surname of the provider the caller asked for, lower case. Use any when they have no preference." }
+        },
+        "required": ["location", "appointment_type", "time_preference", "provider"]
+      },
+      "response_variables": {
+        "slots_status": "status"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "book_appointment",
+      "name": "book_appointment",
+      "description": "Book the slot the caller chose. Returns { \"status\": \"booked\", \"say\": \"Tuesday, April 16 at 2:40 PM with Dr. Patel\", \"appointment_id\": \"...\" }, or { \"status\": \"queued\", \"say\": \"...\" } when the write could not land and the front desk will finish it.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Booking that for you now.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": { "type": "string", "description": "Value of {{patient_id}} returned by find_patient." },
+          "slot_id": { "type": "string", "description": "The exact 'id' string of the slot the caller chose from get_slots. Copy it character for character; never shorten or reformat it." }
+        },
+        "required": ["patient_id", "slot_id"]
+      },
+      "response_variables": {
+        "book_status": "status",
+        "booking_say": "say",
+        "appointment_id": "appointment_id"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "reschedule_appointment",
+      "name": "reschedule_appointment",
+      "description": "Move the caller's next upcoming appointment to the slot they chose. Returns { \"status\": \"booked\", \"say\": \"...\", \"appointment_id\": \"...\" }, { \"status\": \"no_upcoming_appointment\" }, or { \"status\": \"queued\", \"say\": \"...\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Moving your appointment now.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": { "type": "string", "description": "Value of {{patient_id}} returned by find_patient." },
+          "slot_id": { "type": "string", "description": "The exact 'id' string of the slot the caller chose from get_slots." }
+        },
+        "required": ["patient_id", "slot_id"]
+      },
+      "response_variables": {
+        "book_status": "status",
+        "booking_say": "say",
+        "appointment_id": "appointment_id"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "cancel_appointment",
+      "name": "cancel_appointment",
+      "description": "Cancel the caller's next upcoming appointment. Returns { \"status\": \"cancelled\", \"say\": \"Tuesday, April 16 at 2:40 PM with Dr. Patel\" } or { \"status\": \"no_upcoming_appointment\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "One moment while I take care of that.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": { "type": "string", "description": "Value of {{patient_id}} returned by find_patient." }
+        },
+        "required": ["patient_id"]
+      },
+      "response_variables": {
+        "cancel_status": "status",
+        "cancel_say": "say"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "confirm_appointment",
+      "name": "confirm_appointment",
+      "description": "Mark the caller's next upcoming appointment as confirmed. Returns { \"status\": \"confirmed\", \"say\": \"Tuesday, April 16 at 2:40 PM with Dr. Patel\" } or { \"status\": \"no_upcoming_appointment\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Confirming that now.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": { "type": "string", "description": "Value of {{patient_id}} returned by find_patient." }
+        },
+        "required": ["patient_id"]
+      },
+      "response_variables": {
+        "confirm_status": "status",
+        "confirm_say": "say"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "record_sms_opt_in",
+      "name": "record_sms_opt_in",
+      "description": "Record the caller's answer to the text reminder question. Call this exactly once, straight after the question is asked. Returns { \"status\": \"recorded\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": false,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Noted.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "opted_in": { "type": "boolean", "description": "true only if the caller clearly said yes to text reminders. false if they declined or the answer was unclear." }
+        },
+        "required": ["opted_in"]
+      },
+      "response_variables": {
+        "sms_status": "status"
+      }
+    },
+    {
+      "type": "custom",
+      "tool_id": "queue_request",
+      "name": "queue_request",
+      "description": "Send the request to the front desk queue for a person to finish. Use it when the patient could not be found after two attempts (reason not_found), when the caller is a new patient (new_patient), when no slots matched (no_slots), when the caller wants a callback (after_hours_callback), or for anything else you cannot complete (other). Returns { \"status\": \"queued\", \"say\": \"...\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Let me send that to our team.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": ["not_found", "new_patient", "no_slots", "after_hours_callback", "pms_error", "other"],
+            "description": "Why this is going to the queue."
+          },
+          "note_code": {
+            "type": "string",
+            "enum": ["callback", "book", "reschedule", "cancel", "confirm", "question", "new_patient_setup"],
+            "description": "A code for what the caller wanted. Codes only. Never free text about anyone's health."
+          },
+          "preference": {
+            "type": "string",
+            "description": "Short scheduling preference in codes, for example 'hygiene morning any' or 'exam afternoon patel'. Never any clinical detail."
+          },
+          "location": { "type": "string", "enum": ["downtown", "northside"], "description": "Which office. Use downtown when unknown." }
+        },
+        "required": ["reason", "note_code", "location"]
+      },
+      "response_variables": {
+        "queue_status": "status",
+        "queue_say": "say"
+      }
+    }
+  ],
+
+  "nodes": [
+    {
+      "id": "n_opening",
+      "type": "conversation",
+      "name": "1. Opening and intent router",
+      "instruction": {
+        "type": "static_text",
+        "text": "Thanks for calling {{practice_name}}. You're speaking with our automated assistant, and this call is recorded for quality. Say staff at any time to reach a person. How can I help?"
+      },
+      "edges": [
+        { "id": "e_open_book", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book, schedule or make a new appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_open_reschedule", "transition_condition": { "type": "prompt", "prompt": "Caller wants to reschedule, move or change the time of an existing appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_open_cancel", "transition_condition": { "type": "prompt", "prompt": "Caller wants to cancel an existing appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_open_confirm", "transition_condition": { "type": "prompt", "prompt": "Caller wants to confirm an existing appointment or check that it is still on" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_open_question", "transition_condition": { "type": "prompt", "prompt": "Caller asks a general office question: opening hours, which office, directions, parking, which insurance carriers are accepted, what kinds of appointment are offered, or how long a visit takes" }, "destination_node_id": "n_question" },
+        { "id": "e_open_staff", "transition_condition": { "type": "prompt", "prompt": "Caller says staff, person, human, representative, front desk or operator, or raises any clinical, pain, medication, billing, balance or records topic" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_open_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_intent_clarify" }
+    },
+    {
+      "id": "n_intent_clarify",
+      "type": "conversation",
+      "name": "1b. Intent clarify",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"I can help you book, reschedule, cancel or confirm an appointment, or answer questions about our hours, insurance and directions. Which would you like?\" Then wait."
+      },
+      "edges": [
+        { "id": "e_clar_sched", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book, reschedule, cancel or confirm an appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_clar_question", "transition_condition": { "type": "prompt", "prompt": "Caller asks a general office question about hours, directions, parking, insurance or appointment types" }, "destination_node_id": "n_question" },
+        { "id": "e_clar_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or raises a clinical, billing or records topic" }, "destination_node_id": "n_staff_request" },
+        { "id": "e_clar_done", "transition_condition": { "type": "prompt", "prompt": "Caller says that is all, says goodbye or wants to hang up" }, "destination_node_id": "n_end" }
+      ],
+      "else_edge": { "id": "e_clar_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_intent_clarify" }
+    },
+    {
+      "id": "n_capture_intent",
+      "type": "extract_dynamic_variables",
+      "name": "1c. Capture intent",
+      "variables": [
+        {
+          "type": "enum",
+          "name": "intent",
+          "description": "What the caller wants to do with an appointment.",
+          "choices": ["book", "reschedule", "cancel", "confirm", "unclear"],
+          "required": true
+        }
+      ],
+      "edges": [
+        { "id": "e_intent_unclear", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "unclear" }], "operator": "&&" }, "destination_node_id": "n_intent_clarify" }
+      ],
+      "else_edge": { "id": "e_intent_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_identify" }
+    },
+    {
+      "id": "n_question",
+      "type": "conversation",
+      "name": "2. Question, answered from the practice facts in the global prompt",
+      "instruction": {
+        "type": "prompt",
+        "text": "Answer the caller's question using ONLY the practice facts in the global prompt: the two offices with their addresses, hours and parking, the providers, the four appointment types with their durations, and the list of insurance carriers accepted. Keep the answer to two or three sentences. If the question is about insurance, finish with exactly: \"We'll verify your coverage before your visit.\" If the answer is not in the practice facts, say: \"I don't have that detail, but our team can help\" and offer to pass it to the team. Never answer anything about a specific person's treatment, balance, bill or records; those go to staff. After answering, ask: \"Is there anything else I can help with?\""
+      },
+      "edges": [
+        { "id": "e_q_sched", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book, reschedule, cancel or confirm an appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_q_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or raises a clinical, pain, medication, billing, balance or records topic" }, "destination_node_id": "n_staff_request" },
+        { "id": "e_q_queue", "transition_condition": { "type": "prompt", "prompt": "Caller accepts the offer to have the team follow up on a question the assistant could not answer" }, "destination_node_id": "n_queue_other" },
+        { "id": "e_q_done", "transition_condition": { "type": "prompt", "prompt": "Caller says that is all, thanks you or says goodbye" }, "destination_node_id": "n_end" }
+      ],
+      "else_edge": { "id": "e_q_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_question" }
+    },
+    {
+      "id": "n_identify",
+      "type": "conversation",
+      "name": "3. Identify by full name and date of birth",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"Sure. To find your record, may I have your full name and date of birth?\" Collect both. If the date of birth is unclear, ask for the month, day and year. Do NOT ask for anything else: no social security number, no insurance member id, no address, no email, no phone number. If the caller says they are new or have never been to the practice, do not ask for a date of birth."
+      },
+      "edges": [
+        { "id": "e_id_collected", "transition_condition": { "type": "prompt", "prompt": "Caller has given both a full name and a date of birth" }, "destination_node_id": "n_find_patient" },
+        { "id": "e_id_new", "transition_condition": { "type": "prompt", "prompt": "Caller says they are a new patient, have never visited or have no record here" }, "destination_node_id": "n_new_patient" },
+        { "id": "e_id_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or raises a clinical, pain, medication, billing or records topic" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_id_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_identify" }
+    },
+    {
+      "id": "n_find_patient",
+      "type": "function",
+      "name": "3a. find_patient, attempt 1",
+      "tool_id": "find_patient",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "One moment while I look that up." },
+      "edges": [
+        { "id": "e_fp1_found", "transition_condition": { "type": "equation", "equations": [{ "left": "{{find_status}}", "operator": "==", "right": "found" }], "operator": "&&" }, "destination_node_id": "n_route_intent" }
+      ],
+      "else_edge": { "id": "e_fp1_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_identify_retry" }
+    },
+    {
+      "id": "n_identify_retry",
+      "type": "conversation",
+      "name": "3b. Identify retry, second and last attempt",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"I wasn't able to find a match. Let's try once more. Could you spell your last name, and give me your date of birth again?\" Collect the spelled last name and the date of birth. Do not ask for anything else."
+      },
+      "edges": [
+        { "id": "e_idr_collected", "transition_condition": { "type": "prompt", "prompt": "Caller has given their name again and a date of birth" }, "destination_node_id": "n_find_patient_retry" },
+        { "id": "e_idr_new", "transition_condition": { "type": "prompt", "prompt": "Caller says they are a new patient or have never visited" }, "destination_node_id": "n_new_patient" },
+        { "id": "e_idr_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_idr_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_identify_retry" }
+    },
+    {
+      "id": "n_find_patient_retry",
+      "type": "function",
+      "name": "3c. find_patient, attempt 2",
+      "tool_id": "find_patient",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Checking again." },
+      "edges": [
+        { "id": "e_fp2_found", "transition_condition": { "type": "equation", "equations": [{ "left": "{{find_status}}", "operator": "==", "right": "found" }], "operator": "&&" }, "destination_node_id": "n_route_intent" }
+      ],
+      "else_edge": { "id": "e_fp2_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_not_found" }
+    },
+    {
+      "id": "n_queue_not_found",
+      "type": "function",
+      "name": "3d. queue_request, reason not_found, after two misses",
+      "tool_id": "queue_request",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "I still couldn't find a match, so I'll pass this to our team. Call queue_request with reason set to not_found." },
+      "edges": [],
+      "else_edge": { "id": "e_qnf_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_new_patient",
+      "type": "conversation",
+      "name": "3e. New patient intake, minimal",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"Welcome. Our team sets up new patients personally. I'll take a couple of details and they'll call or text you within the hour.\" Collect, one at a time: their full name, and which office they prefer, Downtown or Northside. Do not ask for a date of birth, insurance, address, email, or the reason for the visit beyond cleaning, exam, emergency or crown."
+      },
+      "edges": [
+        { "id": "e_np_collected", "transition_condition": { "type": "prompt", "prompt": "Caller has given a full name and a location preference" }, "destination_node_id": "n_queue_new_patient" },
+        { "id": "e_np_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or describes pain or an emergency" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_np_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_new_patient" }
+    },
+    {
+      "id": "n_queue_new_patient",
+      "type": "function",
+      "name": "3f. queue_request, reason new_patient",
+      "tool_id": "queue_request",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Sending that to our team now. Call queue_request with reason set to new_patient and note_code set to new_patient_setup." },
+      "edges": [],
+      "else_edge": { "id": "e_qnp_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_route_intent",
+      "type": "branch",
+      "name": "4. Route by intent once identified",
+      "edges": [
+        { "id": "e_ri_book", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "book" }], "operator": "&&" }, "destination_node_id": "n_book_prefs" },
+        { "id": "e_ri_resched", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "reschedule" }], "operator": "&&" }, "destination_node_id": "n_book_prefs" },
+        { "id": "e_ri_cancel", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "cancel" }], "operator": "&&" }, "destination_node_id": "n_cancel" },
+        { "id": "e_ri_confirm", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "confirm" }], "operator": "&&" }, "destination_node_id": "n_confirm" }
+      ],
+      "else_edge": { "id": "e_ri_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_intent_clarify" }
+    },
+    {
+      "id": "n_book_prefs",
+      "type": "conversation",
+      "name": "5. Type, office and time preference",
+      "instruction": {
+        "type": "prompt",
+        "text": "Greet the caller by first name: \"Thanks, {{patient_first_name}}.\" If {{intent}} is reschedule, say you'll find a new time for their upcoming visit. Then ask, one at a time: (1) \"Is this for a cleaning and exam, a new patient exam, an emergency visit, or a crown fitting?\" (2) \"Downtown or Northside?\" (3) \"Do you prefer mornings or afternoons, and is there a provider you'd like to see?\" Accept no preference for any of these. Do not ask about symptoms or the reason for an emergency visit. If the caller starts describing pain or a problem, stop and go to staff."
+      },
+      "edges": [
+        { "id": "e_bp_collected", "transition_condition": { "type": "prompt", "prompt": "Caller has given an appointment type, an office, and a time or provider preference, or said no preference" }, "destination_node_id": "n_get_slots" },
+        { "id": "e_bp_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or describes pain, symptoms, medication, a balance or records" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_bp_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_book_prefs" }
+    },
+    {
+      "id": "n_get_slots",
+      "type": "function",
+      "name": "5a. get_slots",
+      "tool_id": "get_slots",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Let me check what's available." },
+      "edges": [
+        { "id": "e_gs_none", "transition_condition": { "type": "equation", "equations": [{ "left": "{{slots_status}}", "operator": "==", "right": "none_available" }], "operator": "&&" }, "destination_node_id": "n_queue_no_slots" }
+      ],
+      "else_edge": { "id": "e_gs_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_offer_slots" }
+    },
+    {
+      "id": "n_offer_slots",
+      "type": "conversation",
+      "name": "5b. Offer at most three slots",
+      "instruction": {
+        "type": "prompt",
+        "text": "Offer the caller the options from the get_slots result, reading each slot's 'say' text exactly as returned. Offer at most three, and number them one, two, three. Ask which one works. Do not invent any other times, providers or dates. If none of them work, ask whether they would like to try a different time of day, a different provider, or the other office. Keep the 'id' of whichever slot they choose; you will pass it verbatim to the booking tool."
+      },
+      "edges": [
+        { "id": "e_os_chosen", "transition_condition": { "type": "prompt", "prompt": "Caller clearly chose one of the offered slots" }, "destination_node_id": "n_book_or_resched" },
+        { "id": "e_os_other", "transition_condition": { "type": "prompt", "prompt": "None of the slots work and the caller wants to try a different time of day, provider or office" }, "destination_node_id": "n_book_prefs" },
+        { "id": "e_os_queue", "transition_condition": { "type": "prompt", "prompt": "None of the slots work and the caller would rather have the team call them back" }, "destination_node_id": "n_queue_no_slots" },
+        { "id": "e_os_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or raises a clinical or billing topic" }, "destination_node_id": "n_staff_request" }
+      ],
+      "else_edge": { "id": "e_os_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_offer_slots" }
+    },
+    {
+      "id": "n_queue_no_slots",
+      "type": "function",
+      "name": "5c. queue_request, reason no_slots",
+      "tool_id": "queue_request",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "I don't have a matching opening, so I'll have our team find one for you. Call queue_request with reason set to no_slots." },
+      "edges": [],
+      "else_edge": { "id": "e_qns_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_book_or_resched",
+      "type": "branch",
+      "name": "5d. Book or reschedule?",
+      "edges": [
+        { "id": "e_bor_resched", "transition_condition": { "type": "equation", "equations": [{ "left": "{{intent}}", "operator": "==", "right": "reschedule" }], "operator": "&&" }, "destination_node_id": "n_reschedule" }
+      ],
+      "else_edge": { "id": "e_bor_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_book" }
+    },
+    {
+      "id": "n_book",
+      "type": "function",
+      "name": "5e. book_appointment",
+      "tool_id": "book_appointment",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Booking that for you now." },
+      "edges": [
+        { "id": "e_bk_ok", "transition_condition": { "type": "equation", "equations": [{ "left": "{{book_status}}", "operator": "==", "right": "booked" }], "operator": "&&" }, "destination_node_id": "n_readback" }
+      ],
+      "else_edge": { "id": "e_bk_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_reschedule",
+      "type": "function",
+      "name": "5f. reschedule_appointment",
+      "tool_id": "reschedule_appointment",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Moving your appointment now." },
+      "edges": [
+        { "id": "e_rs_ok", "transition_condition": { "type": "equation", "equations": [{ "left": "{{book_status}}", "operator": "==", "right": "booked" }], "operator": "&&" }, "destination_node_id": "n_readback" },
+        { "id": "e_rs_none", "transition_condition": { "type": "equation", "equations": [{ "left": "{{book_status}}", "operator": "==", "right": "no_upcoming_appointment" }], "operator": "&&" }, "destination_node_id": "n_no_upcoming" }
+      ],
+      "else_edge": { "id": "e_rs_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_readback",
+      "type": "conversation",
+      "name": "5g. Read back the day, time, provider and location only",
+      "instruction": {
+        "type": "prompt",
+        "text": "Confirm by reading back ONLY the day, the time, the provider's name and the office, taken from the tool result's 'say' text. For example: \"You're all set for Tuesday, April 16 at 2:40 PM with Dr. Patel at our Downtown office.\" Never mention a procedure code, a fee, a balance, an appointment id, or anything else. Then ask: \"Does that sound right?\""
+      },
+      "edges": [
+        { "id": "e_rb_ok", "transition_condition": { "type": "prompt", "prompt": "Caller confirms the read back is correct" }, "destination_node_id": "n_sms_optin" },
+        { "id": "e_rb_change", "transition_condition": { "type": "prompt", "prompt": "Caller says something is wrong or wants a different time" }, "destination_node_id": "n_book_prefs" }
+      ],
+      "else_edge": { "id": "e_rb_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_sms_optin" }
+    },
+    {
+      "id": "n_sms_optin",
+      "type": "conversation",
+      "name": "6. SMS opt-in, fixed wording, script v1.0",
+      "instruction": {
+        "type": "static_text",
+        "text": "Would you like a text reminder to this number before your visit? Message and data rates may apply, and you can reply STOP at any time."
+      },
+      "edges": [
+        { "id": "e_sms_yes", "transition_condition": { "type": "prompt", "prompt": "Caller clearly agrees to receive text reminders" }, "destination_node_id": "n_record_sms" },
+        { "id": "e_sms_no", "transition_condition": { "type": "prompt", "prompt": "Caller declines text reminders or says not to text them" }, "destination_node_id": "n_record_sms" }
+      ],
+      "else_edge": { "id": "e_sms_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_record_sms" }
+    },
+    {
+      "id": "n_record_sms",
+      "type": "function",
+      "name": "6a. record_sms_opt_in",
+      "tool_id": "record_sms_opt_in",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Noted. Pass opted_in as true only if the caller clearly said yes, otherwise false." },
+      "edges": [],
+      "else_edge": { "id": "e_rsms_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_wrap_up" }
+    },
+    {
+      "id": "n_cancel",
+      "type": "function",
+      "name": "7a. cancel_appointment",
+      "tool_id": "cancel_appointment",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "One moment while I take care of that." },
+      "edges": [
+        { "id": "e_cx_ok", "transition_condition": { "type": "equation", "equations": [{ "left": "{{cancel_status}}", "operator": "==", "right": "cancelled" }], "operator": "&&" }, "destination_node_id": "n_cancel_done" },
+        { "id": "e_cx_none", "transition_condition": { "type": "equation", "equations": [{ "left": "{{cancel_status}}", "operator": "==", "right": "no_upcoming_appointment" }], "operator": "&&" }, "destination_node_id": "n_no_upcoming" }
+      ],
+      "else_edge": { "id": "e_cx_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_cancel_done",
+      "type": "conversation",
+      "name": "7b. Cancel confirmation",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"Done. Your appointment on <day and time from the tool result> is cancelled.\" Mention only the day and the time. Then ask: \"Would you like to book a new time now?\""
+      },
+      "edges": [
+        { "id": "e_cd_rebook", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book a new appointment now" }, "destination_node_id": "n_book_prefs" }
+      ],
+      "else_edge": { "id": "e_cd_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_wrap_up" }
+    },
+    {
+      "id": "n_confirm",
+      "type": "function",
+      "name": "7c. confirm_appointment",
+      "tool_id": "confirm_appointment",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Confirming that now." },
+      "edges": [
+        { "id": "e_cf_ok", "transition_condition": { "type": "equation", "equations": [{ "left": "{{confirm_status}}", "operator": "==", "right": "confirmed" }], "operator": "&&" }, "destination_node_id": "n_confirm_done" },
+        { "id": "e_cf_none", "transition_condition": { "type": "equation", "equations": [{ "left": "{{confirm_status}}", "operator": "==", "right": "no_upcoming_appointment" }], "operator": "&&" }, "destination_node_id": "n_no_upcoming" }
+      ],
+      "else_edge": { "id": "e_cf_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_confirm_done",
+      "type": "conversation",
+      "name": "7d. Confirm confirmation",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"You're confirmed for <day, time and provider name from the tool result>.\" Mention nothing else about the appointment, then move on to wrap up."
+      },
+      "edges": [],
+      "else_edge": { "id": "e_cfd_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_wrap_up" }
+    },
+    {
+      "id": "n_no_upcoming",
+      "type": "conversation",
+      "name": "7e. No upcoming appointment on file",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"I don't see an upcoming appointment on your record. Would you like to book one, or have our team call you?\""
+      },
+      "edges": [
+        { "id": "e_nu_book", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book an appointment" }, "destination_node_id": "n_book_prefs" },
+        { "id": "e_nu_queue", "transition_condition": { "type": "prompt", "prompt": "Caller wants the team to call them" }, "destination_node_id": "n_queue_other" }
+      ],
+      "else_edge": { "id": "e_nu_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_wrap_up" }
+    },
+    {
+      "id": "n_queue_other",
+      "type": "function",
+      "name": "8a. queue_request, reason other",
+      "tool_id": "queue_request",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Let me send that to our team. Call queue_request with reason set to other." },
+      "edges": [],
+      "else_edge": { "id": "e_qo_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_queue_message",
+      "type": "conversation",
+      "name": "8b. Queue message, fixed text",
+      "instruction": {
+        "type": "static_text",
+        "text": "I've sent that to our team and they'll confirm with you by text or call within the hour."
+      },
+      "skip_response_edge": { "id": "e_qm_skip", "transition_condition": { "type": "prompt", "prompt": "Skip response" }, "destination_node_id": "n_wrap_up" },
+      "edges": [],
+      "else_edge": { "id": "e_qm_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_wrap_up" }
+    },
+    {
+      "id": "n_wrap_up",
+      "type": "conversation",
+      "name": "9. Wrap up",
+      "instruction": {
+        "type": "prompt",
+        "text": "Ask: \"Is there anything else I can help with today?\" If the caller already said they do not want text messages, do not bring texts up again."
+      },
+      "edges": [
+        { "id": "e_wu_sched", "transition_condition": { "type": "prompt", "prompt": "Caller wants to book, reschedule, cancel or confirm another appointment" }, "destination_node_id": "n_capture_intent" },
+        { "id": "e_wu_question", "transition_condition": { "type": "prompt", "prompt": "Caller asks a general office question" }, "destination_node_id": "n_question" },
+        { "id": "e_wu_staff", "transition_condition": { "type": "prompt", "prompt": "Caller asks for staff or a person, or raises a clinical, billing or records topic" }, "destination_node_id": "n_staff_request" },
+        { "id": "e_wu_done", "transition_condition": { "type": "prompt", "prompt": "Caller says no, that is all, thanks or goodbye" }, "destination_node_id": "n_end" }
+      ],
+      "else_edge": { "id": "e_wu_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_end" }
+    },
+    {
+      "id": "n_staff_request",
+      "type": "conversation",
+      "name": "10. Staff request, global node, reachable from anywhere",
+      "global_node_setting": {
+        "condition": "The caller says 'staff', 'person', 'human', 'representative', 'front desk' or 'operator', or asks to speak to someone, OR raises ANY clinical topic (pain, hurting, symptoms, swelling, bleeding, infection, a diagnosis, medications, prescriptions, antibiotics, anesthesia, allergies, an emergency), ANY billing topic (balance, bill, invoice, what they owe, payment, cost of treatment, insurance claim, statement) or ANY records topic (x-rays, x-ray results, chart, treatment plan, records release).",
+        "cool_down": 0
+      },
+      "instruction": {
+        "type": "prompt",
+        "text": "If the caller simply asked for a person, say: \"Of course. One moment while I connect you to our team.\" Otherwise, if they raised a clinical, pain, medication, billing, balance or records topic, say in your own words that you cannot help with that here, that only a member of the team can go into it, and offer to connect them now. For example: \"I'm not able to help with that here, only our team can. Would you like me to connect you?\" Do NOT answer the question, do not speculate, and do not repeat any clinical or billing detail back to them. If they describe something life threatening, tell them to call 911."
+      },
+      "skip_response_edge": { "id": "e_sr_skip", "transition_condition": { "type": "prompt", "prompt": "Skip response" }, "destination_node_id": "n_transfer" },
+      "edges": [
+        { "id": "e_sr_yes", "transition_condition": { "type": "prompt", "prompt": "Caller accepts the offer to be connected, or asked for a person in the first place" }, "destination_node_id": "n_transfer" },
+        { "id": "e_sr_no", "transition_condition": { "type": "prompt", "prompt": "Caller declines the transfer and wants to carry on with scheduling instead" }, "destination_node_id": "n_wrap_up" }
+      ],
+      "else_edge": { "id": "e_sr_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_transfer" }
+    },
+    {
+      "id": "n_transfer",
+      "type": "transfer_call",
+      "name": "10a. Warm transfer to the front desk",
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Connecting you now, please hold." },
+      "transfer_destination": { "type": "predefined", "number": "{{front_desk_number}}" },
+      "transfer_option": {
+        "type": "warm_transfer",
+        "show_transferee_as_caller": true,
+        "agent_detection_timeout_ms": 30000,
+        "transfer_ring_duration_ms": 30000,
+        "on_hold_music": "relaxing_sound",
+        "opt_out_human_detection": false,
+        "public_handoff_option": {
+          "type": "static_message",
+          "message": "I have a caller on the line who would like to speak with the front desk."
+        },
+        "private_handoff_option": {
+          "type": "prompt",
+          "prompt": "In one sentence, tell the staff member the caller's first name if you know it and the category of what they need, for example 'The caller, Sam, has a billing question.' Never state a date of birth, an address, a phone number or any clinical detail."
+        }
+      },
+      "edge": {
+        "id": "e_tr_failed",
+        "transition_condition": { "type": "prompt", "prompt": "Transfer failed" },
+        "destination_node_id": "n_transfer_fallback"
+      }
+    },
+    {
+      "id": "n_transfer_fallback",
+      "type": "conversation",
+      "name": "10b. Transfer failed, take a callback instead",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"Our team isn't free to take the call right now. I can have them call you back on this number. Would that work?\" Do not ask for a different number unless the caller offers one. If they have not given their name yet, ask for their first and last name. Ask for nothing else."
+      },
+      "edges": [
+        { "id": "e_tf_yes", "transition_condition": { "type": "prompt", "prompt": "Caller accepts a callback or gives a callback number" }, "destination_node_id": "n_queue_callback" },
+        { "id": "e_tf_no", "transition_condition": { "type": "prompt", "prompt": "Caller declines a callback or wants to hang up" }, "destination_node_id": "n_end" }
+      ],
+      "else_edge": { "id": "e_tf_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_callback" }
+    },
+    {
+      "id": "n_queue_callback",
+      "type": "function",
+      "name": "10c. queue_request, reason after_hours_callback",
+      "tool_id": "queue_request",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Sending that to our team now. Call queue_request with reason set to after_hours_callback and note_code set to callback." },
+      "edges": [],
+      "else_edge": { "id": "e_qcb_else", "transition_condition": { "type": "prompt", "prompt": "Else" }, "destination_node_id": "n_queue_message" }
+    },
+    {
+      "id": "n_end",
+      "type": "end",
+      "name": "11. End",
+      "speak_during_execution": true,
+      "instruction": { "type": "static_text", "text": "Thanks for calling {{practice_name}}. Goodbye." }
+    }
+  ]
+}

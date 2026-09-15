@@ -1,0 +1,274 @@
+### Dental AI receptionist demo: whole pipeline without a voice call.
+#
+# This is the fallback for demo day. If the audio fails, if the phone number
+# will not connect, or if the Render instance is cold and the room is waiting,
+# run these requests from top to bottom and the compliance panel fills in
+# exactly as it would during a real call: signature step, patient match, slot
+# check, appointment write, audit row, consent rows, call outcome.
+#
+# Needs the VS Code extension "REST Client" (humao.rest-client). Click the
+# "Send Request" link that appears above each ### block.
+#
+# BEFORE YOU START
+#   1. Set ALLOW_UNSIGNED_WEBHOOKS=true in .env.local (or in the Render or
+#      Vercel environment) and restart the app. Without it every request below
+#      comes back 401, because these requests carry no x-retell-signature.
+#   2. Reset the demo so the seeded practice day is clean (request 1).
+#   3. Switch @host below to whichever environment you are demonstrating.
+#
+# AFTERWARDS, set ALLOW_UNSIGNED_WEBHOOKS back to false. It is a demo escape
+# hatch and nothing else.
+
+@host = http://localhost:3000
+# @host = https://dental-demo.onrender.com
+# @host = https://dental-demo.vercel.app
+
+# One call id ties every request below into a single call in the dashboard.
+# Change it if you want a second, separate call on the timeline.
+@callId = call_demo_fallback_001
+
+# The seeded demo patient. lib/seed.ts, DEMO_PATIENTS[0].
+@firstName = Sarah
+@lastName = Whitfield
+@dob = 1986-04-12
+
+
+### 1. Reset the demo to a fresh practice day
+POST {{host}}/api/reset
+Content-Type: application/json
+
+###
+
+
+### 2. Is the tool endpoint reachable, and is the signature check off?
+# Expect: { "ok": true, "signature_required": false }
+# If signature_required is true, ALLOW_UNSIGNED_WEBHOOKS is not set and every
+# request below will return 401.
+GET {{host}}/api/retell/tool
+
+###
+
+
+### 3. Call starts. Opens the call row so the dashboard has something to draw.
+POST {{host}}/api/retell/post-call
+Content-Type: application/json
+
+{
+  "event": "call_started",
+  "call": {
+    "call_id": "{{callId}}",
+    "from_number": "+15550143311",
+    "to_number": "+15550142200",
+    "call_type": "phone_call"
+  }
+}
+
+###
+
+
+### 4. find_patient. Identify by full name and date of birth only.
+# Expect: { "status": "found", "patient_id": "pat_001", "first_name": "Sarah" }
+# Nothing else comes back: no phone, no address, no email.
+# @name findPatient
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "find_patient",
+  "call": {
+    "call_id": "{{callId}}",
+    "from_number": "+15550143311",
+    "to_number": "+15550142200"
+  },
+  "args": {
+    "first_name": "{{firstName}}",
+    "last_name": "{{lastName}}",
+    "date_of_birth": "{{dob}}"
+  }
+}
+
+###
+
+
+### 4b. find_patient with a wrong date of birth, to show the miss path.
+# Expect: { "status": "not_found" }. Two of these in a real call send the
+# request to the front desk queue instead of guessing.
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "find_patient",
+  "call": { "call_id": "{{callId}}", "from_number": "+15550143311" },
+  "args": {
+    "first_name": "{{firstName}}",
+    "last_name": "{{lastName}}",
+    "date_of_birth": "1986-04-13"
+  }
+}
+
+###
+
+
+### 5. get_slots. At most three options, each with the exact words to speak.
+# Expect: { "slots": [ { "id": "...", "say": "Tuesday, ... with Dr. Patel" } ] }
+# or { "status": "none_available" } if the seeded fortnight happens to be full.
+# @name getSlots
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "get_slots",
+  "call": { "call_id": "{{callId}}", "from_number": "+15550143311" },
+  "args": {
+    "location": "downtown",
+    "appointment_type": "hygiene",
+    "time_preference": "morning",
+    "provider": "any"
+  }
+}
+
+###
+
+
+### 6. book_appointment, using the first slot get_slots just returned.
+# The slot id carries its own start time, provider, operatory and type, so no
+# server side state is needed between the two requests.
+# Expect: { "status": "booked", "say": "...", "appointment_id": "apt_..." }
+# If it returns { "status": "queued" }, the slot was taken in between, which is
+# the conflict path. Re-run request 5 and try the next slot.
+# @name bookAppointment
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "book_appointment",
+  "call": { "call_id": "{{callId}}", "from_number": "+15550143311" },
+  "args": {
+    "patient_id": "{{findPatient.response.body.$.patient_id}}",
+    "slot_id": "{{getSlots.response.body.$.slots[0].id}}"
+  }
+}
+
+###
+
+
+### 7. record_sms_opt_in. Written as a dated consent row, script v1.0.
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "record_sms_opt_in",
+  "call": { "call_id": "{{callId}}", "from_number": "+15550143311" },
+  "args": { "opted_in": true }
+}
+
+###
+
+
+### 8. Optional: queue_request, the fallback when the write cannot land.
+# Codes only in the note, never free text about anyone's health.
+POST {{host}}/api/retell/tool
+Content-Type: application/json
+
+{
+  "name": "queue_request",
+  "call": { "call_id": "{{callId}}", "from_number": "+15550143311" },
+  "args": {
+    "reason": "not_found",
+    "note_code": "book",
+    "preference": "hygiene morning any",
+    "location": "downtown"
+  }
+}
+
+###
+
+
+### 9. Call ends. Writes the recording notice and AI disclosure consent rows.
+POST {{host}}/api/retell/post-call
+Content-Type: application/json
+
+{
+  "event": "call_ended",
+  "call": {
+    "call_id": "{{callId}}",
+    "from_number": "+15550143311",
+    "to_number": "+15550142200",
+    "disconnection_reason": "user_hangup"
+  }
+}
+
+###
+
+
+### 10. Call analyzed. The outcome and the compliance flag land here.
+# phi_beyond_scheduling_mentioned true raises the review flag in the panel.
+# Set it to false to show a clean scheduling-only call instead.
+POST {{host}}/api/retell/post-call
+Content-Type: application/json
+
+{
+  "event": "call_analyzed",
+  "call": {
+    "call_id": "{{callId}}",
+    "from_number": "+15550143311",
+    "to_number": "+15550142200",
+    "call_analysis": {
+      "call_summary": "Caller booked a cleaning and exam at the Downtown office and accepted text reminders.",
+      "user_sentiment": "Positive",
+      "call_successful": true,
+      "custom_analysis_data": {
+        "outcome": "booked",
+        "phi_beyond_scheduling_mentioned": false,
+        "sms_opt_in_given": true
+      }
+    }
+  }
+}
+
+###
+
+
+### 10b. The refusal scene, as a second call. Shows the flag being raised.
+POST {{host}}/api/retell/post-call
+Content-Type: application/json
+
+{
+  "event": "call_analyzed",
+  "call": {
+    "call_id": "call_demo_fallback_002",
+    "from_number": "+15550143311",
+    "call_analysis": {
+      "call_summary": "Caller asked about tooth pain and an outstanding balance. The assistant declined both and offered to connect them to the team.",
+      "user_sentiment": "Neutral",
+      "call_successful": true,
+      "custom_analysis_data": {
+        "outcome": "transferred",
+        "phi_beyond_scheduling_mentioned": true,
+        "sms_opt_in_given": false
+      }
+    }
+  }
+}
+
+###
+
+
+### 11. Read the state the panel draws from, to confirm it all landed.
+GET {{host}}/api/state
+
+###
+
+
+### 12. Optional: the redaction toggle, same categories Retell scrubs with.
+POST {{host}}/api/redact
+Content-Type: application/json
+
+{
+  "turns": [
+    { "role": "agent", "content": "To find your record, may I have your full name and date of birth?" },
+    { "role": "user", "content": "Sarah Whitfield, April twelfth nineteen eighty six, and you can reach me on 555 014 3311." }
+  ]
+}
+
+###

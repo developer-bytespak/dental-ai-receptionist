@@ -1,0 +1,78 @@
+# Render blueprint for the dental AI receptionist demo.
+#
+# Deploy: push this repo to GitHub, then in Render choose New > Blueprint and
+# point it at this file. Render reads it from the repo root of the service,
+# so set the service root directory to this folder if the repo holds more
+# than the demo.
+#
+# WARNING, READ BEFORE A DEMO: a free Render instance spins down after about
+# fifteen minutes with no traffic, and the next request takes roughly fifty
+# seconds to answer while the container boots. Retell's tool webhook times out
+# at 15000 ms, so a cold instance will fail the first tool call of the call and
+# the agent will fall back to the queue path. ALWAYS warm the instance before
+# the demo: open the site, wait for it to paint, and make one test call. See
+# the "Before the demo" checklist in README.md. Upgrade to a paid instance type
+# if the demo cannot tolerate that risk.
+
+services:
+  - type: web
+    name: dental-ai-receptionist-demo
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+
+    # GET /api/config returns the practice branding and touches no database,
+    # so it is cheap enough to poll and still proves the app booted.
+    healthCheckPath: /api/config
+
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+
+      # Leave DATABASE_URL unset to use the embedded PGlite database. PGlite
+      # writes to the container filesystem, which Render wipes on every deploy
+      # and on every spin down, so the demo resets itself. That is fine, and
+      # arguably good: every demo starts from the seeded practice day.
+      # Set it to a Neon or Render Postgres connection string if the data must
+      # survive a restart.
+      - key: DATABASE_URL
+        sync: false
+
+      - key: PGLITE_DIR
+        value: /tmp/pgdata
+
+      # Secret. Retell dashboard > API Keys. Also the HMAC key the webhook
+      # signature is verified with, so it must match the key that created the
+      # agent.
+      - key: RETELL_API_KEY
+        sync: false
+
+      # Secret-ish. Public key for the browser call widget, safe to ship to the
+      # client but still set per environment.
+      - key: NEXT_PUBLIC_RETELL_PUBLIC_KEY
+        sync: false
+
+      # Printed by retell/push-demo-config.ts after it creates the agent.
+      - key: NEXT_PUBLIC_RETELL_AGENT_ID
+        sync: false
+
+      # The Retell number bound to the agent, shown on the demo page.
+      - key: NEXT_PUBLIC_DEMO_PHONE_NUMBER
+        sync: false
+
+      # Secret. Salt for the patient and phone pseudonyms in the audit log.
+      # Generate once with: openssl rand -hex 32
+      - key: PATIENT_HASH_SALT
+        sync: false
+
+      # Must stay false for a real demo so the signature check is enforced and
+      # the compliance panel shows a green verification step. Flip to true only
+      # to exercise tests/demo-pipeline.http without a voice call.
+      - key: ALLOW_UNSIGNED_WEBHOOKS
+        value: "false"

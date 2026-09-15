@@ -1,0 +1,64 @@
+{
+  "agent_name": "dental-demo-reception",
+
+  "response_engine": {
+    "type": "conversation-flow",
+    "conversation_flow_id": "<CONVERSATION_FLOW_ID>"
+  },
+
+  "voice_id": "<VOICE_ID>",
+  "voice_speed": 1,
+  "language": "en-US",
+
+  "data_storage_setting": "everything_except_pii",
+  "data_storage_retention_days": 30,
+
+  "pii_config": {
+    "mode": "post_call",
+    "categories": [
+      "person_name",
+      "date_of_birth",
+      "phone_number",
+      "address",
+      "email",
+      "medical_id",
+      "ssn"
+    ]
+  },
+
+  "opt_in_signed_url": true,
+  "signed_url_expiration_ms": 3600000,
+
+  "webhook_url": "https://<DEMO_HOST>/api/retell/post-call",
+
+  "post_call_analysis_data": [
+    {
+      "type": "enum",
+      "name": "outcome",
+      "description": "What actually happened on this call. booked when a new appointment was written. rescheduled when an existing appointment was moved. cancelled when an appointment was cancelled. confirmed when an existing appointment was confirmed. transferred when the caller was handed to a person. info_only when the caller only asked a question. queued when the request was passed to the front desk queue. voicemail when the call reached a machine or nobody spoke.",
+      "choices": [
+        "booked",
+        "rescheduled",
+        "cancelled",
+        "confirmed",
+        "transferred",
+        "info_only",
+        "queued",
+        "voicemail"
+      ]
+    },
+    {
+      "type": "boolean",
+      "name": "phi_beyond_scheduling_mentioned",
+      "description": "True if the caller raised any clinical topic (pain, symptoms, swelling, bleeding, infection, a diagnosis, medications, prescriptions, anesthesia, allergies, an emergency), any billing topic (balance, bill, invoice, what they owe, payment, insurance claim, statement) or any records topic (x-rays, chart, treatment plan, records release), whether or not the assistant answered. False if the call stayed on scheduling, hours, directions, parking and which insurance carriers are accepted."
+    },
+    {
+      "type": "boolean",
+      "name": "sms_opt_in_given",
+      "description": "True only if the caller clearly agreed to receive text reminders after being read the text reminder question. False if they declined, were not asked, or the answer was unclear."
+    }
+  ],
+
+  "max_call_duration_ms": 900000,
+  "end_call_after_silence_ms": 30000
+}
