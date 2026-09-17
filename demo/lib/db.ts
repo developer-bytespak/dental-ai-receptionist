@@ -1,5 +1,5 @@
 /**
- * Database access for the demo.
+ * Database access for the demo. Shared with the dental build.
  *
  * Two drivers, one interface:
  *   - DATABASE_URL set   -> real Postgres (Neon on Vercel and Render)
@@ -13,6 +13,76 @@ import { SCHEMA_SQL, TRUNCATE_SQL } from "./schema";
 
 export type Row = Record<string, any>;
 
+export type DatabaseMode = "postgres" | "embedded-local" | "embedded-ephemeral";
+
+/**
+ * Finds the Postgres connection string whatever the host called it.
+ *
+ * Vercel's own Postgres sets POSTGRES_URL, its Neon and Supabase marketplace
+ * integrations set DATABASE_URL or POSTGRES_PRISMA_URL, and Render sets
+ * DATABASE_URL. Accepting all of them removes a step that is easy to get
+ * wrong and hard to spot, because the app just silently runs on the wrong
+ * store.
+ *
+ * Pooled URLs come first: serverless opens and drops connections constantly,
+ * which is exactly what a pooler is for.
+ */
+export function connectionString(): string | undefined {
+  const candidates = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.DATABASE_POSTGRES_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.DATABASE_URL_UNPOOLED,
+  ];
+  return candidates.find((v) => typeof v === "string" && v.startsWith("postgres"));
+}
+
+/** Which variable supplied the connection, for the diagnostics endpoint. */
+export function connectionSource(): string | null {
+  for (const name of [
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "DATABASE_POSTGRES_URL",
+    "POSTGRES_URL_NON_POOLING",
+    "DATABASE_URL_UNPOOLED",
+  ]) {
+    const v = process.env[name];
+    if (typeof v === "string" && v.startsWith("postgres")) return name;
+  }
+  return null;
+}
+
+function isServerless(): boolean {
+  return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+/**
+ * Which store is in use, and whether it is shared between requests.
+ *
+ * This matters more than it looks. On a serverless host each request can land
+ * on a different instance, so the embedded database gives every request its
+ * own empty copy: the agent books a job on one instance and the browser polls
+ * another, and the board never updates. A demo deployed that way looks broken
+ * in the one way that matters. Set DATABASE_URL to a real Postgres.
+ */
+export function databaseMode(): DatabaseMode {
+  if (connectionString()) return "postgres";
+  return isServerless() ? "embedded-ephemeral" : "embedded-local";
+}
+
+export function databaseWarning(): string | null {
+  if (databaseMode() !== "embedded-ephemeral") return null;
+  return (
+    "No Postgres connection string was found, so this deployment is using the embedded " +
+    "database inside a serverless function. State is not shared between requests, so " +
+    "bookings will not appear on the board. Attach a Postgres database and redeploy. " +
+    "Any of DATABASE_URL, POSTGRES_URL or POSTGRES_PRISMA_URL will be picked up."
+  );
+}
+
 interface Driver {
   query(sql: string, params?: any[]): Promise<{ rows: Row[] }>;
   /** Runs a script that contains several statements. */
@@ -23,7 +93,7 @@ let driverPromise: Promise<Driver> | null = null;
 let schemaReady: Promise<void> | null = null;
 
 async function makeDriver(): Promise<Driver> {
-  const url = process.env.DATABASE_URL;
+  const url = connectionString();
 
   if (url) {
     const { Pool } = await import("pg");
@@ -45,8 +115,15 @@ async function makeDriver(): Promise<Driver> {
     };
   }
 
+  // Serverless filesystems are read only apart from /tmp, so the embedded
+  // database cannot live beside the code there.
+  const defaultDir = isServerless() ? "/tmp/pgdata" : "./.pgdata";
   const { PGlite } = await import("@electric-sql/pglite");
-  const pg = new PGlite(process.env.PGLITE_DIR || "./.pgdata");
+  const pg = new PGlite(process.env.PGLITE_DIR || defaultDir);
+  // PGlite boots a WebAssembly Postgres. Touching it before that finishes
+  // aborts the runtime, which showed up as a 500 on the first request after a
+  // cold start and then worked forever after.
+  await pg.waitReady;
   return {
     query: async (sql, params) => {
       const result = await pg.query(sql, params);

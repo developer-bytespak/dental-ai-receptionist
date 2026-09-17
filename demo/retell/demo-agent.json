@@ -1,18 +1,14 @@
 {
   "agent_name": "dental-demo-reception",
-
   "response_engine": {
     "type": "conversation-flow",
     "conversation_flow_id": "<CONVERSATION_FLOW_ID>"
   },
-
   "voice_id": "<VOICE_ID>",
   "voice_speed": 1,
   "language": "en-US",
-
   "data_storage_setting": "everything_except_pii",
   "data_storage_retention_days": 30,
-
   "pii_config": {
     "mode": "post_call",
     "categories": [
@@ -25,12 +21,9 @@
       "ssn"
     ]
   },
-
   "opt_in_signed_url": true,
   "signed_url_expiration_ms": 3600000,
-
   "webhook_url": "https://<DEMO_HOST>/api/retell/post-call",
-
   "post_call_analysis_data": [
     {
       "type": "enum",
@@ -58,7 +51,39 @@
       "description": "True only if the caller clearly agreed to receive text reminders after being read the text reminder question. False if they declined, were not asked, or the answer was unclear."
     }
   ],
-
   "max_call_duration_ms": 900000,
-  "end_call_after_silence_ms": 30000
+  "end_call_after_silence_ms": 30000,
+  "stt_mode": "accurate",
+  "vocab_specialization": "medical",
+  "denoising_mode": "noise-cancellation",
+  "reminder_trigger_ms": 20000,
+  "reminder_max_count": 1,
+  "interruption_sensitivity": 1,
+  "responsiveness": 1,
+  "begin_message_delay_ms": 1000,
+  "boosted_keywords": [
+    "cleaning",
+    "hygiene",
+    "exam",
+    "crown",
+    "filling",
+    "root canal",
+    "Invisalign",
+    "whitening",
+    "x-ray",
+    "Delta Dental",
+    "Cigna",
+    "Aetna",
+    "MetLife",
+    "Guardian",
+    "United Concordia",
+    "Principal",
+    "Downtown",
+    "Northside",
+    "Dr. Patel",
+    "Dr. Kim",
+    "Ms. Hayes",
+    "Dr. Okafor",
+    "Riverside"
+  ]
 }

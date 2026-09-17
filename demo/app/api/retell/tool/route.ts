@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { logPipeline, touchCall } from "@/lib/audit";
+import { databaseWarning } from "@/lib/db";
 import { signatureRequired, verifyRetellSignature, type ToolRequest } from "@/lib/retell";
 import { runTool } from "@/lib/tools";
 
@@ -15,6 +16,19 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  try {
+    return await handle(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    // Retell may read this aloud in the worst case, so keep it short and calm.
+    return NextResponse.json(
+      { status: "error", say: "I could not reach the schedule just now", detail: message, hint: databaseWarning() },
+      { status: 200 },
+    );
+  }
+}
+
+async function handle(request: NextRequest) {
   const startedAt = Date.now();
 
   // Raw body first: the signature is computed over the exact bytes.
