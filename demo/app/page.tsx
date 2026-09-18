@@ -193,6 +193,7 @@ export default function Page() {
               key={item.id}
               type="button"
               className="nav-item"
+              title={item.label}
               aria-current={view === item.id ? "page" : undefined}
               onClick={() => setView(item.id)}
             >

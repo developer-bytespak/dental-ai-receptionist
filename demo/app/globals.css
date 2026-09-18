@@ -1606,8 +1606,14 @@ button { font: inherit; color: inherit; }
 
 /* =========================== narrow screens =========================== */
 
-@media (max-width: 1440px) {
-  :root { --side-w: 12.5rem; }
+/* Laptops get an icon rail so the board keeps its width. */
+@media (max-width: 1360px) {
+  :root { --side-w: 4.5714rem; }
+  .brand-text, .nav-item > :not(.nav-icon), .side-reset-hint, .onair > :not(.onair-dot) { display: none; }
+  .nav-item { justify-content: center; padding: 0.7143rem 0; }
+  .side-brand { justify-content: center; padding: 0; }
+  .side-reset { text-align: center; }
+  .onair { justify-content: center; padding: 0.5714rem 0; }
 }
 
 @media (max-width: 1180px) {
@@ -1617,12 +1623,6 @@ button { font: inherit; color: inherit; }
 }
 
 @media (max-width: 1060px) {
-  :root { --side-w: 4.5714rem; }
-  .brand-text, .nav-item > :not(.nav-icon), .side-reset-hint, .onair > :not(.onair-dot) { display: none; }
-  .nav-item { justify-content: center; padding: 0.7143rem 0; }
-  .side-brand { justify-content: center; padding: 0; }
-  .side-reset { text-align: center; }
-  .onair { justify-content: center; padding: 0.5714rem 0; }
   .field-label { display: none; }
   .panel-sub { display: none; }
 }
