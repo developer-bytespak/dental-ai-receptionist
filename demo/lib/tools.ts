@@ -21,6 +21,7 @@ import {
   providerById,
 } from "./config";
 import { logAccess, logConsent, logPipeline, queueRequest, touchCall } from "./audit";
+import { nameMatches, nameTokens, parseDob } from "./identity";
 import { patientRef, phoneHash, type ToolRequest } from "./retell";
 
 export type ToolResponse = Record<string, unknown>;
@@ -57,16 +58,20 @@ function resolveLocation(raw: unknown): string {
 /** ---------------------------------------------------------------- 1 */
 
 async function findPatient(req: ToolRequest): Promise<ToolResponse> {
-  const first = String(req.args.first_name ?? "").trim();
-  const last = String(req.args.last_name ?? "").trim();
-  const dob = String(req.args.date_of_birth ?? "").trim();
+  // The date is the exact factor. The name is matched forgivingly, because
+  // speech to text splits and spells names however it likes.
+  const dob = parseDob(req.args.date_of_birth);
+  const tokens = nameTokens(req.args.first_name, req.args.last_name);
 
-  const rows = await q<{ id: string; first_name: string; location_id: string }>(
-    `select id, first_name, location_id from demo_patients
-     where lower(first_name) = lower($1) and lower(last_name) = lower($2)
-       and date_of_birth = $3::date`,
-    [first, last, dob],
-  );
+  const rows = dob
+    ? (
+        await q<{ id: string; first_name: string; last_name: string; location_id: string }>(
+          `select id, first_name, last_name, location_id from demo_patients
+           where date_of_birth = $1::date`,
+          [dob],
+        )
+      ).filter((p) => nameMatches(tokens, p.first_name, p.last_name))
+    : [];
 
   if (rows.length !== 1) {
     await logPipeline(req.call.call_id, "patient_matched", "warn", rows.length ? "more than one match" : "no match");
