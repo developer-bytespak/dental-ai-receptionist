@@ -290,6 +290,7 @@ export default function Page() {
             callId={call.callId}
             startedAt={call.startedAt}
             agentTalking={call.agentTalking}
+            ringing={call.ringing}
             muted={call.muted}
             turns={call.turns}
             storedTurns={storedTurns}

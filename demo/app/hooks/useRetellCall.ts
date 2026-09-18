@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startRingback, type Ringback } from "./ringback";
 import type {
   CallEndedEvent,
   LiveCallUtterance,
@@ -69,6 +70,7 @@ export interface UseRetellCall {
   callId: string | null;
   startedAt: number | null;
   agentTalking: boolean;
+  ringing: boolean;
   muted: boolean;
   turns: TranscriptTurn[];
   toolSignals: ToolSignal[];
@@ -90,6 +92,14 @@ export function useRetellCall(locationName: string): UseRetellCall {
   const [callId, setCallId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [agentTalking, setAgentTalking] = useState(false);
+  /** True from the call button until the agent first speaks. */
+  const [ringing, setRinging] = useState(false);
+  const ringRef = useRef<Ringback | null>(null);
+  const stopRinging = useCallback(() => {
+    ringRef.current?.stop();
+    ringRef.current = null;
+    setRinging(false);
+  }, []);
   const [muted, setMuted] = useState(false);
   const [turns, setTurns] = useState<TranscriptTurn[]>([]);
   const [toolSignals, setToolSignals] = useState<ToolSignal[]>([]);
@@ -167,6 +177,9 @@ export function useRetellCall(locationName: string): UseRetellCall {
     setCallId(null);
     setMuted(false);
     setPhase("connecting");
+    ringRef.current?.stop();
+    ringRef.current = startRingback();
+    setRinging(true);
 
     try {
       const { RetellClient } = await import("retell-client-js-sdk");
@@ -188,19 +201,24 @@ export function useRetellCall(locationName: string): UseRetellCall {
             else if (status === "ended") setPhase("ended");
           },
           onTranscript: (transcript: LiveCallUtterance[]) => applyTranscript(transcript),
-          onAgentStartTalking: () => setAgentTalking(true),
+          onAgentStartTalking: () => {
+            stopRinging();
+            setAgentTalking(true);
+          },
           onAgentStopTalking: () => setAgentTalking(false),
           onNodeTransition: (event) => {
             const name = (event as { new_node_name?: unknown }).new_node_name;
             if (typeof name === "string") setCurrentNode(name);
           },
           onEnd: (event: CallEndedEvent) => {
+            stopRinging();
             setEndedReason(event.disconnection_reason ?? null);
             setAgentTalking(false);
             setPhase("ended");
             sessionRef.current = null;
           },
           onError: (err: Error) => {
+            stopRinging();
             setError(err.message || "The call could not be connected.");
             setAgentTalking(false);
             setPhase("error");
@@ -224,12 +242,14 @@ export function useRetellCall(locationName: string): UseRetellCall {
       );
       setPhase("error");
       sessionRef.current = null;
+      stopRinging();
     } finally {
       startingRef.current = false;
     }
-  }, [applyTranscript, config]);
+  }, [applyTranscript, config, stopRinging]);
 
   const end = useCallback(async () => {
+    stopRinging();
     const session = sessionRef.current;
     if (!session) {
       setPhase((prev) => (prev === "idle" ? prev : "ended"));
@@ -244,7 +264,7 @@ export function useRetellCall(locationName: string): UseRetellCall {
     sessionRef.current = null;
     setAgentTalking(false);
     setPhase("ended");
-  }, []);
+  }, [stopRinging]);
 
   const toggleMute = useCallback(() => {
     const session = sessionRef.current;
@@ -275,6 +295,7 @@ export function useRetellCall(locationName: string): UseRetellCall {
       callId,
       startedAt,
       agentTalking,
+      ringing,
       muted,
       turns,
       toolSignals,
@@ -292,6 +313,7 @@ export function useRetellCall(locationName: string): UseRetellCall {
       callId,
       startedAt,
       agentTalking,
+      ringing,
       muted,
       turns,
       toolSignals,
