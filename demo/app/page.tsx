@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CallPanel from "@/app/components/CallPanel";
+import DayPicker from "@/app/components/DayPicker";
 import SchedulePanel from "@/app/components/SchedulePanel";
 import PipelinePanel from "@/app/components/PipelinePanel";
 import CompliancePanel from "@/app/components/CompliancePanel";
@@ -36,12 +37,6 @@ function greetingForHour(hour: number): string {
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 }
-
-const DAYS = [
-  { offset: 0, label: "Today" },
-  { offset: 1, label: "Tomorrow" },
-  { offset: 2, label: "In two days" },
-];
 
 type Theme = "system" | "light" | "dark";
 
@@ -258,22 +253,8 @@ export default function Page() {
             </div>
 
             <div className="field">
-              <span className="field-label" id="day-label">
-                Day
-              </span>
-              <div className="seg" role="group" aria-labelledby="day-label">
-                {DAYS.map((d) => (
-                  <button
-                    key={d.offset}
-                    type="button"
-                    className="seg-btn"
-                    aria-pressed={dayOffset === d.offset}
-                    onClick={() => setDayOffset(d.offset)}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
+              <span className="field-label">Day</span>
+              <DayPicker dayOffset={dayOffset} onChange={setDayOffset} />
             </div>
 
             <button
