@@ -17,6 +17,26 @@ import { LOCATIONS, PRACTICE } from "@/lib/config";
 import { useDemoState } from "@/app/hooks/useDemoState";
 import { useRetellCall, type TranscriptTurn } from "@/app/hooks/useRetellCall";
 
+/**
+ * The sidebar. Only the first item is a real screen. The others put a
+ * spotlight on one region of it, which is what a presenter actually wants
+ * mid demo: "let's look at the compliance trail" and the rest steps back.
+ */
+type View = "desk" | "call" | "schedule" | "compliance";
+
+const NAV: { id: View; label: string; icon: string }[] = [
+  { id: "desk", label: "Live desk", icon: "M4 6h16M4 12h16M4 18h10" },
+  { id: "call", label: "Front desk", icon: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" },
+  { id: "schedule", label: "Schedule", icon: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4" },
+  { id: "compliance", label: "Compliance", icon: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" },
+];
+
+function greetingForHour(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 const DAYS = [
   { offset: 0, label: "Today" },
   { offset: 1, label: "Tomorrow" },
@@ -50,6 +70,7 @@ export default function Page() {
   }, []);
   const showingDark = theme === "dark" || (theme === "system" && systemDark);
   const [resetting, setResetting] = useState(false);
+  const [view, setView] = useState<View>("desk");
 
   const [showStored, setShowStored] = useState(false);
   const [storedTurns, setStoredTurns] = useState<TranscriptTurn[] | null>(null);
@@ -154,86 +175,129 @@ export default function Page() {
   }, [clear]);
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="brand">
+    <div className="app" data-view={view}>
+      <aside className="sidebar" aria-label="Sections">
+        <div className="side-brand">
           <span className="brand-mark" aria-hidden="true">
             {practiceName.slice(0, 1)}
           </span>
           <div className="brand-text">
-            <h1 className="brand-name">{practiceName}</h1>
-            <p className="brand-tagline">{tagline}</p>
+            <span className="brand-name">{practiceName}</span>
+            <span className="brand-tagline">AI front desk</span>
           </div>
         </div>
 
-        <span className={`onair${call.isLive ? "" : " onair-idle"}`} role="status">
-          <span className="onair-dot" aria-hidden="true" />
-          {call.isLive ? "On air" : "Standby"}
-        </span>
+        <nav className="nav">
+          {NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="nav-item"
+              aria-current={view === item.id ? "page" : undefined}
+              onClick={() => setView(item.id)}
+            >
+              <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d={item.icon} />
+              </svg>
+              {item.label}
+            </button>
+          ))}
+        </nav>
 
-        {!state.connected ? (
-          <span className="tag tag-warn" role="status">
-            Reconnecting
+        <div className="side-foot">
+          <span className={`onair${call.isLive ? "" : " onair-idle"}`} role="status">
+            <span className="onair-dot" aria-hidden="true" />
+            {call.isLive ? "On air" : "Standby"}
           </span>
-        ) : null}
-
-        <div className="header-spacer" />
-
-        <div className="header-controls">
-          <div className="field">
-            <span className="field-label" id="location-label">
-              Location
-            </span>
-            <div className="seg" role="group" aria-labelledby="location-label">
-              {headerLocations.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  className="seg-btn"
-                  aria-pressed={activeLocation === l.id}
-                  onClick={() => setLocationId(l.id)}
-                >
-                  {l.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <span className="field-label" id="day-label">
-              Day
-            </span>
-            <div className="seg" role="group" aria-labelledby="day-label">
-              {DAYS.map((d) => (
-                <button
-                  key={d.offset}
-                  type="button"
-                  className="seg-btn"
-                  aria-pressed={dayOffset === d.offset}
-                  onClick={() => setDayOffset(d.offset)}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-quiet"
-            onClick={() => setTheme(showingDark ? "light" : "dark")}
-          >
-            {showingDark ? "Light" : "Dark"}
-          </button>
-
-          <button type="button" className="btn" onClick={onReset} disabled={resetting}>
-            {resetting ? "Resetting" : "Reset demo"}
+          <button type="button" className="side-reset" onClick={onReset} disabled={resetting}>
+            <span>{resetting ? "Resetting" : "Reset demo"}</span>
+            <span className="side-reset-hint">Clears the board and the log</span>
           </button>
         </div>
-      </header>
+      </aside>
+
+      <div className="stage">
+        <header className="topbar">
+          <div className="greet">
+            <h1 className="greet-title">
+              {greetingForHour(new Date().getHours())}, {practiceName.split(" ")[0]}
+            </h1>
+            <p className="greet-sub">{tagline}</p>
+          </div>
+
+          {!state.connected ? (
+            <span className="tag tag-warn" role="status">
+              Reconnecting
+            </span>
+          ) : null}
+
+          <div className="header-spacer" />
+
+          <div className="header-controls">
+            <div className="field">
+              <span className="field-label" id="location-label">
+                Location
+              </span>
+              <div className="seg" role="group" aria-labelledby="location-label">
+                {headerLocations.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    className="seg-btn"
+                    aria-pressed={activeLocation === l.id}
+                    onClick={() => setLocationId(l.id)}
+                  >
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label" id="day-label">
+                Day
+              </span>
+              <div className="seg" role="group" aria-labelledby="day-label">
+                {DAYS.map((d) => (
+                  <button
+                    key={d.offset}
+                    type="button"
+                    className="seg-btn"
+                    aria-pressed={dayOffset === d.offset}
+                    onClick={() => setDayOffset(d.offset)}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => setTheme(showingDark ? "light" : "dark")}
+            >
+              {showingDark ? "Light" : "Dark"}
+            </button>
+
+            <div className="avatar" aria-label={`Front desk, ${locationName}`}>
+              <span className="avatar-mark" aria-hidden="true">
+                {practiceName
+                  .split(" ")
+                  .slice(0, 2)
+                  .map((w) => w[0])
+                  .join("")}
+              </span>
+              <span className="avatar-text">
+                <span className="avatar-name">Front desk</span>
+                <span className="avatar-sub">{locationName}</span>
+              </span>
+            </div>
+          </div>
+        </header>
 
       <main className="main">
-        <div className="col">
+        <div className="col col-call">
           <CallPanel
             phase={call.phase}
             isLive={call.isLive}
@@ -262,7 +326,7 @@ export default function Page() {
           />
         </div>
 
-        <div className="col">
+        <div className="col col-schedule">
           <SchedulePanel
             grid={state.grid}
             appointments={state.appointments}
@@ -271,7 +335,7 @@ export default function Page() {
           />
         </div>
 
-        <div className="col col-right">
+        <div className="col col-right col-compliance">
           <PipelinePanel
             events={state.pipeline}
             focusCallId={focusCallId}
@@ -290,6 +354,7 @@ export default function Page() {
           />
         </div>
       </main>
+      </div>
     </div>
   );
 }
