@@ -86,6 +86,26 @@ function isSpeech(u: LiveCallUtterance): u is LiveCallUtterance & { role: "agent
   return u.role === "agent" || u.role === "user";
 }
 
+/**
+ * The browser's microphone errors, in words a presenter can act on. The raw
+ * messages ("Requested device not found") send people to the wrong place.
+ */
+function explainCallError(message: string): string {
+  if (/notfound|device not found|requested device|no audio input|no microphone/i.test(message)) {
+    return "No microphone found. Check the computer has an input device selected (System Settings, Sound, Input on a Mac) and that the browser is allowed to use it (Privacy and Security, Microphone), then reload.";
+  }
+  if (/permission|denied|notallowed|not allowed/i.test(message)) {
+    return "Microphone access was blocked. Allow the microphone for this site in the browser's site settings and try again.";
+  }
+  if (/notreadable|could not start|in use|track start/i.test(message)) {
+    return "The microphone is in use by another app. Close Zoom, Teams or anything else using it, then try again.";
+  }
+  if (/public key is not allowed/i.test(message)) {
+    return "This site is not on the Retell public key's allowed domains. Add it in the Retell dashboard under API Keys.";
+  }
+  return message || "The call could not be connected.";
+}
+
 export function useRetellCall(locationName: string): UseRetellCall {
   const [config, setConfig] = useState<RetellConfig | null>(null);
   const [phase, setPhase] = useState<CallPhase>("idle");
@@ -224,7 +244,7 @@ export function useRetellCall(locationName: string): UseRetellCall {
           },
           onError: (err: Error) => {
             stopRinging();
-            setError(err.message || "The call could not be connected.");
+            setError(explainCallError(err.message));
             setAgentTalking(false);
             setPhase("error");
             sessionRef.current = null;
@@ -240,11 +260,7 @@ export function useRetellCall(locationName: string): UseRetellCall {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "The call could not be connected.";
-      setError(
-        /permission|denied|notallowed/i.test(message)
-          ? "Microphone access was blocked. Allow the microphone for this site and try again."
-          : message,
-      );
+      setError(explainCallError(message));
       setPhase("error");
       sessionRef.current = null;
       stopRinging();

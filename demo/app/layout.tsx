@@ -1,11 +1,46 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const SITE_URL = "https://dental-ai-receptionist-eta.vercel.app";
+const TITLE = "AI Dental Receptionist | HIPAA-Aware, Books 24/7";
+const DESCRIPTION =
+  "AI dental receptionist that answers every call, books cleanings into your schedule and logs every step for HIPAA. Try the live demo.";
+
 export const metadata: Metadata = {
-  title: "Riverside Family Dental, AI front desk",
-  description:
-    "A live demonstration of a HIPAA aware AI dental receptionist: the call, the schedule it writes to, and the compliance trail it leaves behind.",
-  robots: { index: false, follow: false },
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  applicationName: "Riverside Family Dental AI front desk",
+  keywords: [
+    "AI dental receptionist",
+    "dental phone answering",
+    "HIPAA compliant AI receptionist",
+    "dental appointment booking AI",
+    "after hours dental answering service",
+    "Retell AI dental",
+  ],
+  alternates: { canonical: "/" },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-snippet": -1, "max-image-preview": "large", "max-video-preview": -1 },
+  },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "AI Dental Receptionist demo",
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: "en_US",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "AI dental receptionist demo: the call, the schedule and the compliance trail" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
+  category: "technology",
 };
 
 export const viewport: Viewport = {
@@ -15,6 +50,17 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#f7f4fa" },
     { media: "(prefers-color-scheme: dark)", color: "#0e0812" },
   ],
+};
+
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "AI Dental Receptionist",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: SITE_URL,
+  description: DESCRIPTION,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Live demo" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
         />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }} />
       </head>
       <body>{children}</body>
     </html>

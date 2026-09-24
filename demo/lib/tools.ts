@@ -413,7 +413,7 @@ async function fallbackToQueue(
     detail: { reason },
   });
 
-  return { status: "queued", say: "our team will confirm with you within the hour" };
+  return { status: "queued", reason, say: "our team will confirm with you within the hour" };
 }
 
 async function queueRequestTool(req: ToolRequest): Promise<ToolResponse> {
