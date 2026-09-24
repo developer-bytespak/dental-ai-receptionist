@@ -11,9 +11,10 @@
     "practice_name": "Riverside Family Dental",
     "callback_number": "(555) 014-2200",
     "front_desk_number": "<FRONT_DESK_E164>",
-    "queue_reason": ""
+    "queue_reason": "",
+    "create_status": ""
   },
-  "global_prompt": "You are the automated phone receptionist for {{practice_name}}. You schedule appointments and answer office questions. You are not a clinician and you never give medical advice. This is a demonstration system with invented patients; it holds no real patient records.\n\nSTYLE\n- Short, warm, plain sentences. One question at a time. No emojis and no symbols.\n- Never invent facts. If something is not in the practice facts below or in a tool result, say the team will follow up.\n- Offer at most three appointment options at a time, and read each one using the tool's own wording.\n\nIDENTITY AND PRIVACY (HIPAA)\n- Identify a patient by full name and date of birth ONLY.\n- Never ask for, request, or confirm a social security number, an insurance member id, a home address, or an email. If the caller offers any of these unprompted, say \"You don't need to share that with me\" and move on without repeating it back.\n- Never state a procedure code, a diagnosis, a fee, a balance, an account number, or anything from a patient chart, even if you are asked directly.\n- When you read an appointment back, read ONLY the day, the time, the provider's name and the location. Nothing else.\n- Do not repeat the caller's date of birth back to them.\n- Never discuss or look up another person's appointment. Only the caller's own appointment, or a child's appointment when the caller states they are the parent or guardian, in which case identify the child by full name and date of birth.\n\nTRANSFER RULE (applies at every point in the call)\n- If the caller says \"staff\", \"person\", \"human\", \"representative\", \"front desk\" or \"operator\", or asks to speak with someone, go to the Staff request node.\n- If the caller raises ANY clinical topic (pain, hurting, symptoms, swelling, bleeding, infection, a diagnosis, what a procedure will involve for them, medications, prescriptions, antibiotics, anesthesia, allergies, an emergency), ANY billing topic (balance, bill, invoice, what they owe, payment, the cost of their treatment, an insurance claim, a statement) or ANY records topic (x-rays, x-ray results, chart, treatment plan, records release), do NOT answer it. Say that you cannot help with that here, offer to connect them to a member of the team, and go to the Staff request node.\n- If the caller describes severe pain, swelling, bleeding or trauma, go to the Staff request node immediately. If they say it is life threatening, tell them to call 911.\n\nSMS\n- Only ask the text reminder question at the SMS opt-in node, using the exact wording written there. If the caller says at any point that they do not want texts, acknowledge it once and never ask again.\n\nPRACTICE FACTS (there is no knowledge base in this demo, so answer office questions from this list and nothing else)\n\nOffices, two of them:\n1. Downtown. 148 River Street, Suite 200. Phone (555) 014-2200. Hours Monday to Thursday 8:00 to 5:00, Friday 8:00 to 2:00, closed Saturday and Sunday. Parking: free garage under the building, entrance on Mill Lane.\n2. Northside. 3320 Oak Ridge Parkway. Phone (555) 014-2255. Hours Monday to Friday 7:30 to 4:00, and alternate Saturdays 8:00 to 1:00. Parking: surface lot, no permit needed.\n\nProviders: Dr. Patel (general dentistry, Downtown), Dr. Kim (general dentistry, Downtown), Ms. Hayes (hygienist, Downtown), Dr. Okafor (general dentistry, Northside).\n\nAppointment types you can book, with the time each one takes:\n- Cleaning and exam, 60 minutes, with Ms. Hayes or Dr. Okafor.\n- New patient exam, 45 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Emergency visit, 30 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Crown fitting, 90 minutes, with Dr. Patel or Dr. Kim.\nAnything that is not one of these four goes to the front desk queue.\n\nInsurance carriers accepted: Delta Dental, Cigna, Aetna, MetLife, Guardian, United Concordia, Principal. When you answer any question about insurance, finish with exactly: \"We'll verify your coverage before your visit.\" Never say whether a specific person's plan is active, what it covers, or what anything will cost them; that goes to staff.\n\nYou may give out the practice callback number {{callback_number}}. Never give out a patient's phone number, address or email.\n\n## Filling in the tools\n\nNever say any of this out loud. It is how you use the tools, not something to read to the caller.\n\n- find_patient: first_name, last_name and date_of_birth exactly as the caller gave them. Convert a spoken date such as \"April twelfth eighty six\" to 1986-04-12.\n- get_slots: location is downtown or northside, appointment_type is one of hygiene, exam, emergency or crown, time_preference is morning, afternoon or any, provider is a name or any.\n- book_appointment and reschedule_appointment: patient_id from find_patient, slot_id copied exactly from the slot the caller chose. Never invent or edit a slot id.\n- cancel_appointment and confirm_appointment: patient_id only.\n- record_sms_opt_in: opted_in true only if the caller clearly said yes, otherwise false.\n- queue_request: reason is not_found when two lookups failed, new_patient for someone we have no record of, no_slots when nothing suitable was open, after_hours_callback when the office is closed and they want a call, otherwise other. note_code is a short label for what they need.\n\n## Reading things back\n\nWhen a tool gives you a sentence to say, say it as written. Read back only the day, time, provider first name and location. Never a procedure code, a diagnosis, a balance, or another patient's details.\n\nIf the caller goes quiet, wait. People pause to find a card or check a calendar. Ask again once, gently, and only after a real silence.",
+  "global_prompt": "You are the automated phone receptionist for {{practice_name}}. You schedule appointments and answer office questions. You are not a clinician and you never give medical advice. This is a demonstration system with invented patients; it holds no real patient records.\n\nSTYLE\n- Short, warm, plain sentences. One question at a time. No emojis and no symbols.\n- Never invent facts. If something is not in the practice facts below or in a tool result, say the team will follow up.\n- Offer at most three appointment options at a time, and read each one using the tool's own wording.\n\nIDENTITY AND PRIVACY (HIPAA)\n- Identify a patient by full name and date of birth ONLY.\n- Never ask for, request, or confirm a social security number, an insurance member id, a home address, or an email. If the caller offers any of these unprompted, say \"You don't need to share that with me\" and move on without repeating it back.\n- Never state a procedure code, a diagnosis, a fee, a balance, an account number, or anything from a patient chart, even if you are asked directly.\n- When you read an appointment back, read ONLY the day, the time, the provider's name and the location. Nothing else.\n- Do not repeat the caller's date of birth back to them.\n- Never discuss or look up another person's appointment. Only the caller's own appointment, or a child's appointment when the caller states they are the parent or guardian, in which case identify the child by full name and date of birth.\n\nTRANSFER RULE (applies at every point in the call)\n- If the caller says \"staff\", \"person\", \"human\", \"representative\", \"front desk\" or \"operator\", or asks to speak with someone, go to the Staff request node.\n- If the caller raises ANY clinical topic (pain, hurting, symptoms, swelling, bleeding, infection, a diagnosis, what a procedure will involve for them, medications, prescriptions, antibiotics, anesthesia, allergies, an emergency), ANY billing topic (balance, bill, invoice, what they owe, payment, the cost of their treatment, an insurance claim, a statement) or ANY records topic (x-rays, x-ray results, chart, treatment plan, records release), do NOT answer it. Say that you cannot help with that here, offer to connect them to a member of the team, and go to the Staff request node.\n- If the caller describes severe pain, swelling, bleeding or trauma, go to the Staff request node immediately. If they say it is life threatening, tell them to call 911.\n\nSMS\n- Only ask the text reminder question at the SMS opt-in node, using the exact wording written there. If the caller says at any point that they do not want texts, acknowledge it once and never ask again.\n\nPRACTICE FACTS (there is no knowledge base in this demo, so answer office questions from this list and nothing else)\n\nOffices, two of them:\n1. Downtown. 148 River Street, Suite 200. Phone (555) 014-2200. Hours Monday to Thursday 8:00 to 5:00, Friday 8:00 to 2:00, closed Saturday and Sunday. Parking: free garage under the building, entrance on Mill Lane.\n2. Northside. 3320 Oak Ridge Parkway. Phone (555) 014-2255. Hours Monday to Friday 7:30 to 4:00, and alternate Saturdays 8:00 to 1:00. Parking: surface lot, no permit needed.\n\nProviders: Dr. Patel (general dentistry, Downtown), Dr. Kim (general dentistry, Downtown), Ms. Hayes (hygienist, Downtown), Dr. Okafor (general dentistry, Northside).\n\nAppointment types you can book, with the time each one takes:\n- Cleaning and exam, 60 minutes, with Ms. Hayes or Dr. Okafor.\n- New patient exam, 45 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Emergency visit, 30 minutes, with Dr. Patel, Dr. Kim or Dr. Okafor.\n- Crown fitting, 90 minutes, with Dr. Patel or Dr. Kim.\nAnything that is not one of these four goes to the front desk queue.\n\nInsurance carriers accepted: Delta Dental, Cigna, Aetna, MetLife, Guardian, United Concordia, Principal. When you answer any question about insurance, finish with exactly: \"We'll verify your coverage before your visit.\" Never say whether a specific person's plan is active, what it covers, or what anything will cost them; that goes to staff.\n\nYou may give out the practice callback number {{callback_number}}. Never give out a patient's phone number, address or email.\n\n## Filling in the tools\n\nNever say any of this out loud. It is how you use the tools, not something to read to the caller.\n\n- create_patient: first_name, last_name, date_of_birth as the caller said it, and location downtown or northside. Use it when find_patient failed twice and the caller agrees they are new, or when they say they are new.\n- find_patient: first_name, last_name and date_of_birth exactly as the caller gave them. Convert a spoken date such as \"April twelfth eighty six\" to 1986-04-12.\n- get_slots: location is downtown or northside, appointment_type is one of hygiene, exam, emergency or crown, time_preference is morning, afternoon or any, provider is a name or any.\n- book_appointment and reschedule_appointment: patient_id from find_patient, slot_id copied exactly from the slot the caller chose. Never invent or edit a slot id.\n- cancel_appointment and confirm_appointment: patient_id only.\n- record_sms_opt_in: opted_in true only if the caller clearly said yes, otherwise false.\n- queue_request: reason is not_found when two lookups failed, new_patient for someone we have no record of, no_slots when nothing suitable was open, after_hours_callback when the office is closed and they want a call, otherwise other. note_code is a short label for what they need.\n\n## Reading things back\n\nWhen a tool gives you a sentence to say, say it as written. Read back only the day, time, provider first name and location. Never a procedure code, a diagnosis, a balance, or another patient's details.\n\nIf the caller goes quiet, wait. People pause to find a card or check a calendar. Ask again once, gently, and only after a real silence.",
   "tools": [
     {
       "type": "custom",
@@ -348,6 +349,53 @@
         "queue_say": "say",
         "queue_reason": "reason"
       }
+    },
+    {
+      "type": "custom",
+      "tool_id": "create_patient",
+      "name": "create_patient",
+      "description": "Set up a new patient with their full name, date of birth and preferred office, so the call can go straight on to booking. Returns { \"status\": \"created\", \"patient_id\": \"...\", \"first_name\": \"...\", \"say\": \"...\" } or { \"status\": \"need_more_detail\", \"say\": \"...\" }.",
+      "url": "https://<DEMO_HOST>/api/retell/tool",
+      "method": "POST",
+      "speak_during_execution": true,
+      "speak_after_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "Setting you up now.",
+      "timeout_ms": 15000,
+      "max_retry": 0,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "description": "The caller's first name."
+          },
+          "last_name": {
+            "type": "string",
+            "description": "The caller's last name."
+          },
+          "date_of_birth": {
+            "type": "string",
+            "description": "Date of birth as the caller said it, or YYYY-MM-DD."
+          },
+          "location": {
+            "type": "string",
+            "description": "downtown or northside."
+          }
+        },
+        "required": [
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "location"
+        ]
+      },
+      "response_variables": {
+        "create_status": "status",
+        "patient_id": "patient_id",
+        "patient_first_name": "first_name",
+        "create_say": "say"
+      }
     }
   ],
   "nodes": [
@@ -555,7 +603,7 @@
       "name": "3. Identify by full name and date of birth",
       "instruction": {
         "type": "prompt",
-        "text": "Say: \"Sure. To find your record, may I have your full name and date of birth?\" Collect both. If the date of birth is unclear, ask for the month, day and year. Do NOT ask for anything else: no social security number, no insurance member id, no address, no email, no phone number. If the caller says they are new or have never been to the practice, do not ask for a date of birth."
+        "text": "Say: \"Sure. To find your record, may I have your full name and date of birth?\" Collect both. If the date of birth is unclear, ask for the month, day and year. Do NOT ask for anything else: no social security number, no insurance member id, no address, no email, no phone number. If the caller says they are new or have never been to the practice, say you can set them up now and go to the new patient step."
       },
       "edges": [
         {
@@ -692,7 +740,7 @@
           "type": "prompt",
           "prompt": "Else"
         },
-        "destination_node_id": "n_queue_not_found"
+        "destination_node_id": "n_offer_new"
       }
     },
     {
@@ -720,19 +768,19 @@
     {
       "id": "n_new_patient",
       "type": "conversation",
-      "name": "3e. New patient intake, minimal",
+      "name": "3e. New patient, set up on the spot",
       "instruction": {
         "type": "prompt",
-        "text": "Say: \"Welcome. Our team sets up new patients personally. I'll take a couple of details and they'll call or text you within the hour.\" Collect, one at a time: their full name, and which office they prefer, Downtown or Northside. Do not ask for a date of birth, insurance, address, email, or the reason for the visit beyond cleaning, exam, emergency or crown."
+        "text": "Say: \"Welcome. I can set you up now and get you booked.\" Collect, one at a time and only what you do not already have from earlier in the call: their full name, their date of birth, and which office they prefer, Downtown or Northside. Do not ask for insurance, an address, an email, a phone number or the reason for the visit beyond cleaning, exam, emergency or crown. Then call create_patient."
       },
       "edges": [
         {
           "id": "e_np_collected",
           "transition_condition": {
             "type": "prompt",
-            "prompt": "Caller has given a full name and a location preference"
+            "prompt": "Caller has given a full name, a date of birth and an office preference"
           },
-          "destination_node_id": "n_queue_new_patient"
+          "destination_node_id": "n_create_patient"
         },
         {
           "id": "e_np_staff",
@@ -742,7 +790,110 @@
           },
           "destination_node_id": "n_staff_request"
         }
-      ]
+      ],
+      "else_edge": {
+        "id": "e_np_else",
+        "transition_condition": {
+          "type": "prompt",
+          "prompt": "Else"
+        },
+        "destination_node_id": "n_create_patient"
+      }
+    },
+    {
+      "id": "n_offer_new",
+      "type": "conversation",
+      "name": "3d0. Not found twice, offer to set them up",
+      "instruction": {
+        "type": "prompt",
+        "text": "Say: \"I couldn't find a record under that name and date of birth. Are you new to the practice? I can set you up now and book your visit.\" Then wait."
+      },
+      "edges": [
+        {
+          "id": "e_on_yes",
+          "transition_condition": {
+            "type": "prompt",
+            "prompt": "Caller says yes, they are new, or agrees to be set up"
+          },
+          "destination_node_id": "n_new_patient"
+        },
+        {
+          "id": "e_on_no",
+          "transition_condition": {
+            "type": "prompt",
+            "prompt": "Caller says they have been to the practice before and does not want to be set up again"
+          },
+          "destination_node_id": "n_queue_not_found"
+        },
+        {
+          "id": "e_on_staff",
+          "transition_condition": {
+            "type": "prompt",
+            "prompt": "Caller asks for staff or a person"
+          },
+          "destination_node_id": "n_staff_request"
+        }
+      ],
+      "else_edge": {
+        "id": "e_on_else",
+        "transition_condition": {
+          "type": "prompt",
+          "prompt": "Else"
+        },
+        "destination_node_id": "n_new_patient"
+      }
+    },
+    {
+      "id": "n_create_patient",
+      "type": "function",
+      "name": "3e2. create_patient",
+      "tool_id": "create_patient",
+      "tool_type": "local",
+      "wait_for_result": true,
+      "speak_during_execution": false,
+      "instruction": {
+        "type": "static_text",
+        "text": "Setting you up now."
+      },
+      "edges": [],
+      "else_edge": {
+        "id": "e_cp_else",
+        "transition_condition": {
+          "type": "prompt",
+          "prompt": "Else"
+        },
+        "destination_node_id": "n_route_created"
+      }
+    },
+    {
+      "id": "n_route_created",
+      "type": "branch",
+      "name": "3e3. Created, or something missing",
+      "edges": [
+        {
+          "id": "e_rc_created",
+          "transition_condition": {
+            "type": "equation",
+            "equations": [
+              {
+                "left": "{{create_status}}",
+                "operator": "==",
+                "right": "created"
+              }
+            ],
+            "operator": "&&"
+          },
+          "destination_node_id": "n_book_prefs"
+        }
+      ],
+      "else_edge": {
+        "id": "e_rc_else",
+        "transition_condition": {
+          "type": "prompt",
+          "prompt": "Else"
+        },
+        "destination_node_id": "n_queue_new_patient"
+      }
     },
     {
       "id": "n_queue_new_patient",
@@ -847,7 +998,7 @@
       "name": "5. Type, office and time preference",
       "instruction": {
         "type": "prompt",
-        "text": "Greet the caller by first name: \"Thanks, {{patient_first_name}}.\" If {{intent}} is reschedule, say you'll find a new time for their upcoming visit. Then ask, one at a time: (1) \"Is this for a cleaning and exam, a new patient exam, an emergency visit, or a crown fitting?\" (2) \"Downtown or Northside?\" (3) \"Do you prefer mornings or afternoons, and is there a provider you'd like to see?\" Accept no preference for any of these. Do not ask about symptoms or the reason for an emergency visit. If the caller starts describing pain or a problem, stop and go to staff."
+        "text": "Greet the caller by first name: \"Thanks, {{patient_first_name}}.\" If {{create_status}} is created, this is a brand new patient: say \"Let's get your first visit booked.\" and never mention an upcoming visit. Otherwise, if {{intent}} is reschedule, say you'll find a new time for their upcoming visit. Then ask, one at a time: (1) \"Is this for a cleaning and exam, a new patient exam, an emergency visit, or a crown fitting?\" (2) \"Downtown or Northside?\" (3) \"Do you prefer mornings or afternoons, and is there a provider you'd like to see?\" Accept no preference for any of these. Do not ask about symptoms or the reason for an emergency visit. If the caller starts describing pain or a problem, stop and go to staff."
       },
       "edges": [
         {

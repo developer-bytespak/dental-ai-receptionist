@@ -423,8 +423,59 @@ async function queueRequestTool(req: ToolRequest): Promise<ToolResponse> {
   });
 }
 
+/**
+ * A caller we could not find is, nine times out of ten, a new patient. Set
+ * them up on the spot with the two identifiers the practice keys on, name
+ * and date of birth, and carry straight on to booking. The office completes
+ * the file later; the audit trail records the creation like any other write.
+ */
+async function createPatient(req: ToolRequest): Promise<ToolResponse> {
+  const started = Date.now();
+  const firstName = String(req.args.first_name ?? "").trim();
+  const lastName = String(req.args.last_name ?? "").trim();
+  const dob = parseDob(req.args.date_of_birth);
+  const locationRaw = String(req.args.location ?? "downtown").toLowerCase();
+  const locationId = locationRaw.includes("north") ? "northside" : "downtown";
+
+  if (!firstName || !dob) {
+    await logPipeline(req.call.call_id, "patient_matched", "warn", "new patient needs a name and a date of birth");
+    return { status: "need_more_detail", say: "I need your full name and your date of birth to set you up." };
+  }
+
+  // A browser call has no caller id. The row still needs a number, and it
+  // must not collide with another caller's, so it is unique per record.
+  const phone = String(req.call.from_number ?? "").trim() || `+1000${String(Date.now()).slice(-9)}`;
+  const id = `pat_${Date.now().toString(36)}`;
+
+  await q(
+    `insert into demo_patients (id, first_name, last_name, date_of_birth, phone, location_id)
+     values ($1,$2,$3,$4::date,$5,$6)`,
+    [id, firstName, lastName || "(not given)", dob, phone, locationId],
+  );
+
+  const ref = patientRef(id);
+  await logPipeline(req.call.call_id, "patient_matched", "ok", `new patient created, ref ${ref.slice(0, 8)}`, Date.now() - started);
+  await logAccess({
+    actor: "retell-agent",
+    action: "patient_created",
+    callId: req.call.call_id,
+    patientRef: ref,
+    location: locationId,
+    outcome: "ok",
+    detail: { fields: ["name", "date_of_birth", "location"] },
+  });
+
+  return {
+    status: "created",
+    patient_id: id,
+    first_name: firstName,
+    say: `You're set up, ${firstName}.`,
+  };
+}
+
 const HANDLERS: Record<string, (req: ToolRequest) => Promise<ToolResponse>> = {
   find_patient: findPatient,
+  create_patient: createPatient,
   get_slots: getSlots,
   book_appointment: bookAppointment,
   reschedule_appointment: rescheduleAppointment,

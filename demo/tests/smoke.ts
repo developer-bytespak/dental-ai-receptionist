@@ -111,6 +111,21 @@ async function main() {
   heading("consent rows");
   console.log(await q(`select kind, script_ver, phone_last4 from consent_events order by id asc`));
 
+  heading("a caller who is not on file is set up and can book on the same call, and is found next time");
+  const miss = (await runTool(call("find_patient", { first_name: "Jessica", last_name: "Moore", date_of_birth: "March 3rd 1990" }))) as { status: string };
+  if (miss.status !== "not_found") throw new Error("Jessica is not seeded and must not be found");
+  const made = (await runTool(call("create_patient", { first_name: "Jessica", last_name: "Moore", date_of_birth: "March 3rd 1990", location: "Downtown" }))) as { status: string; patient_id: string; first_name: string };
+  console.log("created:", made.status, made.first_name);
+  if (made.status !== "created") throw new Error(`create_patient must create, got ${made.status}`);
+  const again = (await runTool(call("find_patient", { first_name: "Jessica Moore", last_name: "", date_of_birth: "3/3/1990" }))) as { status: string; patient_id: string };
+  if (again.status !== "found" || again.patient_id !== made.patient_id) throw new Error("a patient created on one call must be found on the next");
+  const slots2 = (await runTool(call("get_slots", { location: "downtown", appointment_type: "hygiene", time_preference: "any", provider: "any" }))) as { slots?: { id: string }[] };
+  if (!slots2.slots?.length) throw new Error("a new patient must be offered slots");
+  const booked2 = (await runTool(call("book_appointment", { patient_id: made.patient_id, slot_id: slots2.slots[0].id }))) as { status: string };
+  if (booked2.status !== "booked") throw new Error(`a new patient must be able to book, got ${booked2.status}`);
+  const second = (await runTool(call("create_patient", { first_name: "Owen", last_name: "Marsh", date_of_birth: "1 Feb 1985", location: "northside" }))) as { patient_id: string };
+  if (second.patient_id === made.patient_id) throw new Error("two new patients must not share a record");
+
   console.log("\nAll checks passed.\n");
 }
 
