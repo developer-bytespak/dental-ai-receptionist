@@ -34,6 +34,18 @@ const ids = new Set(nodes.map((n) => n.id));
 const tools = new Set((flow.tools ?? []).map((t: { name?: string }) => t.name));
 const problems: string[] = [];
 
+// Rejected by the API: "Duplicate edge id". Edge ids must be unique across
+// the whole flow, not just within a node.
+const seenEdgeIds = new Map<string, string>();
+for (const node of nodes) {
+  for (const edge of edgesOf(node)) {
+    if (!edge.id) continue;
+    const owner = seenEdgeIds.get(edge.id);
+    if (owner) problems.push(`${node.id}: edge id ${edge.id} is already used by ${owner}`);
+    else seenEdgeIds.set(edge.id, node.id);
+  }
+}
+
 for (const node of nodes) {
   for (const edge of edgesOf(node)) {
     const dest = edge.destination_node_id;
