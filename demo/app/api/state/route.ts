@@ -18,9 +18,10 @@ import {
   DAY_START_HOUR,
   LOCATIONS,
   OPERATORIES,
-  PRACTICE,
   PROVIDERS,
 } from "@/lib/config";
+import { tenantForRequest } from "@/lib/scope";
+import { tenantId, withTenant, type Tenant } from "@/lib/tenancy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,9 @@ function num(value: string | null, fallback = 0): number {
 
 export async function GET(request: NextRequest) {
   try {
-    return await readState(request);
+    const resolved = await tenantForRequest(request);
+    if (resolved instanceof NextResponse) return resolved;
+    return await withTenant(resolved.tenant, () => readState(request, resolved.tenant));
   } catch (err) {
     // A blank 500 on the endpoint that drives every panel is the worst
     // possible failure to debug during a demo, so say what went wrong.
@@ -44,8 +47,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function readState(request: NextRequest) {
+async function readState(request: NextRequest, tenant: Tenant) {
   const params = request.nextUrl.searchParams;
+  const t = tenantId();
   const sinceAudit = num(params.get("audit"));
   const sincePipeline = num(params.get("pipeline"));
   const sinceConsent = num(params.get("consent"));
@@ -65,50 +69,52 @@ async function readState(request: NextRequest) {
               p.first_name, p.last_name
        from demo_appointments a
        left join demo_patients p on p.id = a.patient_id
-       where a.location_id = $1 and a.starts_at >= $2 and a.starts_at < $3
+       where a.tenant_id = $4 and a.location_id = $1 and a.starts_at >= $2 and a.starts_at < $3
        order by a.starts_at asc`,
-      [locationId, from.toISOString(), to.toISOString()],
+      [locationId, from.toISOString(), to.toISOString(), t],
     ),
     q(
       `select id, occurred_at, call_id, step, status, detail, duration_ms
-       from pipeline_events where id > $1 order by id asc limit 200`,
-      [sincePipeline],
+       from pipeline_events where tenant_id = $2 and id > $1 order by id asc limit 200`,
+      [sincePipeline, t],
     ),
     q(
       `select id, occurred_at, actor, action, call_id, patient_ref,
               appointment_ref, location, outcome, detail
-       from phi_access_log where id > $1 order by id asc limit 200`,
-      [sinceAudit],
+       from phi_access_log where tenant_id = $2 and id > $1 order by id asc limit 200`,
+      [sinceAudit, t],
     ),
     q(
       `select id, occurred_at, call_id, phone_last4, kind, script_ver, channel
-       from consent_events where id > $1 order by id asc limit 200`,
-      [sinceConsent],
+       from consent_events where tenant_id = $2 and id > $1 order by id asc limit 200`,
+      [sinceConsent, t],
     ),
     q(
       `select id, created_at, call_id, location, reason, requested, fulfilled_at
-       from booking_queue where id > $1 order by id asc limit 50`,
-      [sinceQueue],
+       from booking_queue where tenant_id = $2 and id > $1 order by id asc limit 50`,
+      [sinceQueue, t],
     ),
     q(
       `select call_id, started_at, ended_at, channel, outcome, flagged, summary
-       from demo_calls order by started_at desc limit 10`,
+       from demo_calls where tenant_id = $1 order by started_at desc limit 10`,
+      [t],
     ),
     q(
       `select
-         (select count(*)::int from phi_access_log)  as audit_rows,
-         (select count(*)::int from consent_events)  as consent_rows,
-         (select count(*)::int from booking_queue where fulfilled_at is null) as queue_open,
-         (select count(*)::int from demo_appointments where created_by = 'ai_agent' and status <> 'cancelled') as ai_booked`,
+         (select count(*)::int from phi_access_log where tenant_id = $1)  as audit_rows,
+         (select count(*)::int from consent_events where tenant_id = $1)  as consent_rows,
+         (select count(*)::int from booking_queue where tenant_id = $1 and fulfilled_at is null) as queue_open,
+         (select count(*)::int from demo_appointments where tenant_id = $1 and created_by = 'ai_agent' and status <> 'cancelled') as ai_booked`,
+      [t],
     ),
   ]);
 
   return NextResponse.json({
     practice: {
-      name: PRACTICE.name,
-      shortName: PRACTICE.shortName,
-      tagline: PRACTICE.tagline,
-      callbackNumber: PRACTICE.callbackNumber,
+      name: tenant.name,
+      shortName: tenant.short_name,
+      tagline: tenant.tagline ?? "",
+      callbackNumber: tenant.main_number ?? "",
     },
     grid: {
       locationId,

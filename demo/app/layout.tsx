@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+
+const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 
 const SITE_URL = "https://dental-ai-receptionist-eta.vercel.app";
 const TITLE = "AI Dental Receptionist | HIPAA-Aware, Books 24/7";
@@ -64,6 +67,9 @@ const STRUCTURED_DATA = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Clerk wraps the tree only when its keys exist, so the public demo still
+  // builds and deploys before the Clerk application is created.
+  const body = clerkConfigured ? <ClerkProvider afterSignOutUrl="/">{children}</ClerkProvider> : children;
   return (
     <html lang="en">
       <head>
@@ -80,7 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }} />
       </head>
-      <body>{children}</body>
+      <body>{body}</body>
     </html>
   );
 }

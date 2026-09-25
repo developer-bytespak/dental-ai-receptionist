@@ -12,6 +12,7 @@
  */
 
 import { q } from "./db";
+import { tenantId } from "./tenancy";
 import {
   APPOINTMENT_TYPES,
   LOCATIONS,
@@ -67,8 +68,8 @@ async function findPatient(req: ToolRequest): Promise<ToolResponse> {
     ? (
         await q<{ id: string; first_name: string; last_name: string; location_id: string }>(
           `select id, first_name, last_name, location_id from demo_patients
-           where date_of_birth = $1::date`,
-          [dob],
+           where tenant_id = $2 and date_of_birth = $1::date`,
+          [dob, tenantId()],
         )
       ).filter((p) => nameMatches(tokens, p.first_name, p.last_name))
     : [];
@@ -124,9 +125,9 @@ async function getSlots(req: ToolRequest): Promise<ToolResponse> {
 
   const busy = await q<{ provider_id: string; operatory_id: string; starts_at: string; ends_at: string }>(
     `select provider_id, operatory_id, starts_at, ends_at from demo_appointments
-     where location_id = $1 and status <> 'cancelled'
+     where tenant_id = $4 and location_id = $1 and status <> 'cancelled'
        and starts_at between $2 and $3`,
-    [locationId, from.toISOString(), to.toISOString()],
+    [locationId, from.toISOString(), to.toISOString(), tenantId()],
   );
 
   const taken = busy.map((b) => ({
@@ -215,10 +216,10 @@ async function bookAppointment(req: ToolRequest): Promise<ToolResponse> {
 
   const clash = await q<{ id: string }>(
     `select id from demo_appointments
-     where status <> 'cancelled'
+     where tenant_id = $5 and status <> 'cancelled'
        and (provider_id = $1 or operatory_id = $2)
        and starts_at < $4 and ends_at > $3`,
-    [slot.providerId, slot.operatoryId, slot.start.toISOString(), end.toISOString()],
+    [slot.providerId, slot.operatoryId, slot.start.toISOString(), end.toISOString(), tenantId()],
   );
 
   if (clash.length) {
@@ -230,8 +231,8 @@ async function bookAppointment(req: ToolRequest): Promise<ToolResponse> {
   await q(
     `insert into demo_appointments
        (id, patient_id, provider_id, operatory_id, location_id, type_id,
-        starts_at, ends_at, status, created_by, call_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,'booked','ai_agent',$9)`,
+        starts_at, ends_at, status, created_by, call_id, tenant_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,'booked','ai_agent',$9,$10)`,
     [
       id,
       patientId,
@@ -242,6 +243,7 @@ async function bookAppointment(req: ToolRequest): Promise<ToolResponse> {
       slot.start.toISOString(),
       end.toISOString(),
       req.call.call_id,
+      tenantId(),
     ],
   );
 
@@ -272,9 +274,9 @@ async function rescheduleAppointment(req: ToolRequest): Promise<ToolResponse> {
 
   const existing = await q<{ id: string }>(
     `select id from demo_appointments
-     where patient_id = $1 and status = 'booked' and starts_at > now()
+     where tenant_id = $2 and patient_id = $1 and status = 'booked' and starts_at > now()
      order by starts_at asc limit 1`,
-    [patientId],
+    [patientId, tenantId()],
   );
 
   if (!existing.length) {
@@ -282,7 +284,7 @@ async function rescheduleAppointment(req: ToolRequest): Promise<ToolResponse> {
     return { status: "no_upcoming_appointment" };
   }
 
-  await q(`update demo_appointments set status = 'cancelled' where id = $1`, [existing[0].id]);
+  await q(`update demo_appointments set status = 'cancelled' where id = $1 and tenant_id = $2`, [existing[0].id, tenantId()]);
   const booked = await bookAppointment(req);
 
   await logAccess({
@@ -306,10 +308,10 @@ async function cancelAppointment(req: ToolRequest): Promise<ToolResponse> {
     `update demo_appointments set status = 'cancelled'
      where id = (
        select id from demo_appointments
-       where patient_id = $1 and status = 'booked' and starts_at > now()
+       where tenant_id = $2 and patient_id = $1 and status = 'booked' and starts_at > now()
        order by starts_at asc limit 1
      ) returning id, starts_at, provider_id`,
-    [patientId],
+    [patientId, tenantId()],
   );
 
   if (!rows.length) return { status: "no_upcoming_appointment" };
@@ -335,10 +337,10 @@ async function confirmAppointment(req: ToolRequest): Promise<ToolResponse> {
     `update demo_appointments set status = 'confirmed'
      where id = (
        select id from demo_appointments
-       where patient_id = $1 and status in ('booked','confirmed') and starts_at > now()
+       where tenant_id = $2 and patient_id = $1 and status in ('booked','confirmed') and starts_at > now()
        order by starts_at asc limit 1
      ) returning id, starts_at, provider_id`,
-    [patientId],
+    [patientId, tenantId()],
   );
 
   if (!rows.length) return { status: "no_upcoming_appointment" };
@@ -374,9 +376,9 @@ async function recordSmsOptIn(req: ToolRequest): Promise<ToolResponse> {
 
   if (!optedIn) {
     await q(
-      `insert into suppression_list (phone_hash, source) values ($1,'verbal')
-       on conflict (phone_hash) do nothing`,
-      [phoneHash(phone)],
+      `insert into suppression_list (tenant_id, phone_hash, source) values ($2,$1,'verbal')
+       on conflict (tenant_id, phone_hash) do nothing`,
+      [phoneHash(phone), tenantId()],
     );
   }
 
@@ -448,9 +450,9 @@ async function createPatient(req: ToolRequest): Promise<ToolResponse> {
   const id = `pat_${Date.now().toString(36)}`;
 
   await q(
-    `insert into demo_patients (id, first_name, last_name, date_of_birth, phone, location_id)
-     values ($1,$2,$3,$4::date,$5,$6)`,
-    [id, firstName, lastName || "(not given)", dob, phone, locationId],
+    `insert into demo_patients (id, first_name, last_name, date_of_birth, phone, location_id, tenant_id)
+     values ($1,$2,$3,$4::date,$5,$6,$7)`,
+    [id, firstName, lastName || "(not given)", dob, phone, locationId, tenantId()],
   );
 
   const ref = patientRef(id);

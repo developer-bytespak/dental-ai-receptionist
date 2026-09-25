@@ -1807,3 +1807,141 @@ button { font: inherit; color: inherit; }
     scroll-behavior: auto !important;
   }
 }
+
+/* =====================================================================
+   Product shell additions: account chip, notice pages, admin console.
+   Added in phase 0 (tenancy and sign-in). Uses the tokens above only.
+   ===================================================================== */
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 0.5714rem;
+  padding: 0.5714rem 0.5rem;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.account-mark {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 600 var(--fs-tiny) var(--font-ui);
+}
+.account-text { display: grid; min-width: 0; }
+.account-name { font-size: var(--fs-small); font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-sub { font-size: var(--fs-micro); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-admin {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+}
+.app[data-view] .sidebar .account-text,
+.app[data-view] .sidebar .account-admin { display: grid; }
+@media (max-width: 1360px) {
+  .account-text, .account-admin { display: none !important; }
+}
+
+.notice {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: var(--bg-app);
+}
+.notice-card {
+  max-width: 30rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 2rem;
+  display: grid;
+  gap: 1rem;
+}
+.notice-title { font: 700 var(--fs-display) var(--font-display); color: var(--text); margin: 0; }
+.notice-body { color: var(--text-2); font-size: var(--fs-base); line-height: 1.55; margin: 0; }
+
+.admin { min-height: 100vh; background: var(--bg-app); color: var(--text); }
+.admin-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.admin-brand { font: 700 var(--fs-title) var(--font-display); color: var(--text); text-decoration: none; }
+.admin-nav { display: flex; gap: 1rem; }
+.admin-nav a { color: var(--text-2); text-decoration: none; font-size: var(--fs-small); font-weight: 500; }
+.admin-nav a:hover { color: var(--text); }
+.admin-who { margin-left: auto; color: var(--text-3); font-size: var(--fs-tiny); }
+.admin-main { max-width: 68rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; display: grid; gap: 1.5rem; }
+.admin-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1.5rem; }
+@media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+.admin-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.admin-title { font: 700 var(--fs-display) var(--font-display); margin: 0; }
+.admin-title-sm { font: 700 var(--fs-title) var(--font-display); margin: 0; }
+.admin-count { font: 600 var(--fs-small) var(--font-mono); color: var(--text-3); align-self: center; }
+.admin-back { font-size: var(--fs-tiny); color: var(--text-3); text-decoration: none; }
+.admin-back::before { content: "← "; }
+.admin-sub { display: block; font-size: var(--fs-micro); color: var(--text-3); margin-top: 0.15rem; }
+.admin-help { color: var(--text-2); font-size: var(--fs-small); line-height: 1.5; margin: 0; }
+.admin-link { color: var(--text); font-weight: 600; text-decoration: none; }
+.admin-link:hover { color: var(--accent); }
+.admin-code { font: 500 var(--fs-micro) var(--font-mono); background: var(--bg-inset); padding: 0.15rem 0.4rem; border-radius: 0.35rem; }
+.admin-warn, .admin-notice {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  border: 1px solid var(--line-2);
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+.admin-notice-ok { border-color: rgba(74, 222, 128, 0.4); color: var(--text); }
+.admin-notice-error { border-color: rgba(255, 77, 109, 0.5); color: var(--text); }
+.admin-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.admin-table th { text-align: left; font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+.admin-table td { padding: 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.admin-table tr:last-child td { border-bottom: 0; }
+.admin-row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.admin-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.85rem 1rem; align-items: end; }
+.admin-form-inline { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.admin-field { display: grid; gap: 0.3rem; font-size: var(--fs-tiny); color: var(--text-3); min-width: 0; }
+.admin-field-wide { grid-column: 1 / -1; }
+.admin-field input, .admin-field select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--line-2);
+  background: var(--bg-inset);
+  color: var(--text);
+  font: 500 var(--fs-small) var(--font-ui);
+}
+.admin-field input:focus, .admin-field select:focus { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+.admin-check { display: flex; align-items: center; gap: 0.5rem; font-size: var(--fs-small); color: var(--text-2); }
+.admin-divider { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+.admin-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.admin-danger { border-color: rgba(255, 77, 109, 0.35); }

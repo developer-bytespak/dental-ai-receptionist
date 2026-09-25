@@ -108,6 +108,14 @@ openssl rand -hex 32
 compliance panel is one of the better moments in the demo, and it only appears
 when the check actually runs.
 
+## The product behind the demo
+
+The public page at `/` is the demo. The product lives at `/app` (a
+practice's own workspace, invite only) and `/admin` (our console: create a
+customer, send the invitation, open their workspace). Every table carries
+`tenant_id` and the Retell webhooks route each call to the workspace that
+owns the agent. Setup for sign-in is in [docs/auth-setup.md](docs/auth-setup.md).
+
 ## Running locally, no external services
 
 ```

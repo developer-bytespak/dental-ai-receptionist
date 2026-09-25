@@ -7,6 +7,7 @@
  */
 
 import { q } from "./db";
+import { tenantId } from "./tenancy";
 
 export type PipelineStatus = "running" | "ok" | "warn" | "error";
 
@@ -31,9 +32,9 @@ export async function logPipeline(
   durationMs?: number,
 ): Promise<void> {
   await q(
-    `insert into pipeline_events (call_id, step, status, detail, duration_ms)
-     values ($1,$2,$3,$4,$5)`,
-    [callId, step, status, detail ?? null, durationMs ?? null],
+    `insert into pipeline_events (tenant_id, call_id, step, status, detail, duration_ms)
+     values ($6,$1,$2,$3,$4,$5)`,
+    [callId, step, status, detail ?? null, durationMs ?? null, tenantId()],
   );
 }
 
@@ -49,8 +50,8 @@ export async function logAccess(input: {
 }): Promise<void> {
   await q(
     `insert into phi_access_log
-       (actor, action, call_id, patient_ref, appointment_ref, location, outcome, detail)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+       (actor, action, call_id, patient_ref, appointment_ref, location, outcome, detail, tenant_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       input.actor,
       input.action,
@@ -60,6 +61,7 @@ export async function logAccess(input: {
       input.location ?? null,
       input.outcome,
       input.detail ? JSON.stringify(input.detail) : null,
+      tenantId(),
     ],
   );
 }
@@ -80,8 +82,8 @@ export async function logConsent(input: {
   channel?: "voice" | "sms";
 }): Promise<void> {
   await q(
-    `insert into consent_events (call_id, phone_hash, phone_last4, kind, script_ver, channel)
-     values ($1,$2,$3,$4,$5,$6)`,
+    `insert into consent_events (call_id, phone_hash, phone_last4, kind, script_ver, channel, tenant_id)
+     values ($1,$2,$3,$4,$5,$6,$7)`,
     [
       input.callId,
       input.phoneHash,
@@ -89,6 +91,7 @@ export async function logConsent(input: {
       input.kind,
       input.scriptVer ?? "v1.0",
       input.channel ?? "voice",
+      tenantId(),
     ],
   );
 }
@@ -101,9 +104,9 @@ export async function queueRequest(input: {
   requested: Record<string, unknown>;
 }): Promise<number> {
   const rows = await q<{ id: number }>(
-    `insert into booking_queue (call_id, patient_ref, location, reason, requested)
-     values ($1,$2,$3,$4,$5) returning id`,
-    [input.callId, input.patientRef ?? null, input.location, input.reason, JSON.stringify(input.requested)],
+    `insert into booking_queue (call_id, patient_ref, location, reason, requested, tenant_id)
+     values ($1,$2,$3,$4,$5,$6) returning id`,
+    [input.callId, input.patientRef ?? null, input.location, input.reason, JSON.stringify(input.requested), tenantId()],
   );
   return rows[0]?.id ?? 0;
 }
@@ -111,23 +114,23 @@ export async function queueRequest(input: {
 /** Opens (or refreshes) the row that tracks a call for the demo dashboard. */
 export async function touchCall(callId: string, channel: "web" | "phone" = "web"): Promise<void> {
   await q(
-    `insert into demo_calls (call_id, channel) values ($1,$2)
+    `insert into demo_calls (call_id, channel, tenant_id) values ($1,$2,$3)
      on conflict (call_id) do nothing`,
-    [callId, channel],
+    [callId, channel, tenantId()],
   );
 }
 
 export async function flagCall(callId: string, summary: string): Promise<void> {
   await q(
-    `update demo_calls set flagged = true, summary = coalesce(summary, $2) where call_id = $1`,
-    [callId, summary],
+    `update demo_calls set flagged = true, summary = coalesce(summary, $2) where call_id = $1 and tenant_id = $3`,
+    [callId, summary, tenantId()],
   );
 }
 
 export async function closeCall(callId: string, outcome: string, summary?: string): Promise<void> {
   await q(
     `update demo_calls set ended_at = now(), outcome = $2, summary = coalesce($3, summary)
-     where call_id = $1`,
-    [callId, outcome, summary ?? null],
+     where call_id = $1 and tenant_id = $4`,
+    [callId, outcome, summary ?? null, tenantId()],
   );
 }

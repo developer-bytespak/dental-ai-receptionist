@@ -207,7 +207,10 @@ export interface UseDemoState {
   clear: () => void;
 }
 
-export function useDemoState(locationId: string, dayOffset: number): UseDemoState {
+/** Which workspace the poll reads: the public demo, or the signed-in one. */
+export type Scope = "demo" | "app";
+
+export function useDemoState(locationId: string, dayOffset: number, scope: Scope = "demo"): UseDemoState {
   const [state, setState] = useState<DemoState>(INITIAL);
 
   const cursors = useRef<Cursors>({ pipeline: 0, audit: 0, consent: 0, queue: 0 });
@@ -261,7 +264,7 @@ export function useDemoState(locationId: string, dayOffset: number): UseDemoStat
         ? `&location=${encodeURIComponent(location.current)}`
         : "";
       const url =
-        `/api/state?audit=${c.audit}&pipeline=${c.pipeline}` +
+        `/api/state?scope=${scope}&audit=${c.audit}&pipeline=${c.pipeline}` +
         `&consent=${c.consent}&queue=${c.queue}${where}&day=${day.current}`;
 
       try {
@@ -316,7 +319,7 @@ export function useDemoState(locationId: string, dayOffset: number): UseDemoStat
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", wake);
     };
-  }, []);
+  }, [scope]);
 
   return { state, clear };
 }

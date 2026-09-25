@@ -9,7 +9,10 @@
  * Both speak the same SQL, so the schema and every query are identical.
  */
 
-import { SCHEMA_SQL, TRUNCATE_SQL } from "./schema";
+import { SCHEMA_SQL, TENANT_TABLES } from "./schema";
+import { PRACTICE } from "./config";
+
+const DEMO_TENANT = "demo";
 
 export type Row = Record<string, any>;
 
@@ -89,8 +92,17 @@ interface Driver {
   exec(sql: string): Promise<void>;
 }
 
-let driverPromise: Promise<Driver> | null = null;
-let schemaReady: Promise<void> | null = null;
+/**
+ * One driver per process, whatever the bundler does. Next dev can load this
+ * module once for pages and once for route handlers; two PGlite handles on
+ * the same directory would each see their own copy of the data, and the
+ * admin page would create a customer the API could not find. Postgres does
+ * not care, but the local embedded database does.
+ */
+const shared = globalThis as unknown as {
+  __dentalDriver?: Promise<Driver> | null;
+  __dentalSchemaReady?: Promise<void> | null;
+};
 
 async function makeDriver(): Promise<Driver> {
   const url = connectionString();
@@ -137,8 +149,8 @@ async function makeDriver(): Promise<Driver> {
 }
 
 function driver(): Promise<Driver> {
-  if (!driverPromise) driverPromise = makeDriver();
-  return driverPromise;
+  if (!shared.__dentalDriver) shared.__dentalDriver = makeDriver();
+  return shared.__dentalDriver;
 }
 
 /**
@@ -147,22 +159,29 @@ function driver(): Promise<Driver> {
  * bootstraps itself on first use and there is no deploy step.
  */
 export function ready(): Promise<void> {
-  if (!schemaReady) {
-    schemaReady = (async () => {
+  if (!shared.__dentalSchemaReady) {
+    shared.__dentalSchemaReady = (async () => {
       const d = await driver();
       await d.exec(SCHEMA_SQL);
-      const { rows } = await d.query("select count(*)::int as n from demo_patients");
+      await d.query(
+        `insert into tenants (id, name, short_name, tagline, main_number, timezone, status, plan, retell_agent_id)
+         values ($1,$2,$3,$4,$5,$6,'active','demo',$7)
+         on conflict (id) do update
+           set retell_agent_id = coalesce(excluded.retell_agent_id, tenants.retell_agent_id)`,
+        [DEMO_TENANT, PRACTICE.name, PRACTICE.shortName, PRACTICE.tagline, PRACTICE.callbackNumber, PRACTICE.timezone, process.env.NEXT_PUBLIC_RETELL_AGENT_ID || null],
+      );
+      const { rows } = await d.query("select count(*)::int as n from demo_patients where tenant_id = $1", [DEMO_TENANT]);
       if (!rows[0] || rows[0].n === 0) {
         const { seed } = await import("./seed");
-        await seed();
+        await seed(DEMO_TENANT);
       }
     })().catch((err) => {
       // Let the next request retry rather than caching a failure forever.
-      schemaReady = null;
+      shared.__dentalSchemaReady = null;
       throw err;
     });
   }
-  return schemaReady;
+  return shared.__dentalSchemaReady;
 }
 
 /** Runs a query, bootstrapping the schema first. */
@@ -186,11 +205,23 @@ export async function one<T = Row>(sql: string, params: any[] = []): Promise<T |
   return rows[0];
 }
 
-/** Clears every demo table and reseeds. Backs the "Reset demo" button. */
-export async function resetDemo(): Promise<void> {
+/**
+ * Clears one tenant's data. The demo tenant is reseeded so the public page
+ * comes back as a fresh day; a practice's workspace comes back empty.
+ */
+export async function resetTenant(tenantId: string): Promise<void> {
   await ready();
   const d = await driver();
-  await d.exec(TRUNCATE_SQL);
-  const { seed } = await import("./seed");
-  await seed();
+  for (const table of TENANT_TABLES) {
+    await d.query(`delete from ${table} where tenant_id = $1`, [tenantId]);
+  }
+  if (tenantId === DEMO_TENANT) {
+    const { seed } = await import("./seed");
+    await seed(DEMO_TENANT);
+  }
+}
+
+/** Backs the "Reset demo" button on the public page. */
+export function resetDemo(): Promise<void> {
+  return resetTenant(DEMO_TENANT);
 }

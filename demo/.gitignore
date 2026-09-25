@@ -20,3 +20,7 @@ retell/.demo-ids.json
 # Editor and OS noise
 .DS_Store
 *.log
+
+# Written by next dev for AI agents; not ours to commit.
+AGENTS.md
+CLAUDE.md

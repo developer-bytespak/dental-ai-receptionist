@@ -123,12 +123,12 @@ function buildSchedule(): SeedAppointment[] {
   return out;
 }
 
-export async function seed(): Promise<void> {
+export async function seed(tenantId = "demo"): Promise<void> {
   for (const p of DEMO_PATIENTS) {
     await raw(
-      `insert into demo_patients (id, first_name, last_name, date_of_birth, phone, location_id)
-       values ($1,$2,$3,$4,$5,$6) on conflict (id) do nothing`,
-      [p.id, p.first, p.last, p.dob, p.phone, p.loc],
+      `insert into demo_patients (id, first_name, last_name, date_of_birth, phone, location_id, tenant_id)
+       values ($1,$2,$3,$4,$5,$6,$7) on conflict (id) do nothing`,
+      [p.id, p.first, p.last, p.dob, p.phone, p.loc, tenantId],
     );
   }
 
@@ -137,10 +137,10 @@ export async function seed(): Promise<void> {
     await raw(
       `insert into demo_appointments
          (id, patient_id, provider_id, operatory_id, location_id, type_id,
-          starts_at, ends_at, status, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,'booked','front_desk')
+          starts_at, ends_at, status, created_by, tenant_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,'booked','front_desk',$9)
        on conflict (id) do nothing`,
-      [a.id, a.patientId, a.providerId, a.operatoryId, a.locationId, a.typeId, a.start.toISOString(), ends.toISOString()],
+      [a.id, a.patientId, a.providerId, a.operatoryId, a.locationId, a.typeId, a.start.toISOString(), ends.toISOString(), tenantId],
     );
   }
 
@@ -150,9 +150,9 @@ export async function seed(): Promise<void> {
   await raw(
     `insert into demo_appointments
        (id, patient_id, provider_id, operatory_id, location_id, type_id,
-        starts_at, ends_at, status, created_by)
-     values ('apt_demo_target','pat_001','prov_hayes','op_d3','downtown','hygiene',$1,$2,'booked','front_desk')
+        starts_at, ends_at, status, created_by, tenant_id)
+     values ('apt_demo_target','pat_001','prov_hayes','op_d3','downtown','hygiene',$1,$2,'booked','front_desk',$3)
      on conflict (id) do update set starts_at = excluded.starts_at, ends_at = excluded.ends_at, status = 'booked'`,
-    [target.toISOString(), new Date(target.getTime() + 60 * 60_000).toISOString()],
+    [target.toISOString(), new Date(target.getTime() + 60 * 60_000).toISOString(), tenantId],
   );
 }

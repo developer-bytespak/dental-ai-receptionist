@@ -11,12 +11,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { closeCall, flagCall, logAccess, logConsent, logPipeline, touchCall } from "@/lib/audit";
 import { phoneHash, signatureRequired, verifyRetellSignature } from "@/lib/retell";
+import { tenantByAgentId, withTenant } from "@/lib/tenancy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RetellCall = {
   call_id: string;
+  agent_id?: string;
   from_number?: string;
   to_number?: string;
   call_type?: string;
@@ -52,6 +54,10 @@ export async function POST(request: NextRequest) {
   const callId = call?.call_id;
   if (!callId) return NextResponse.json({ error: "missing call_id" }, { status: 400 });
 
+  const tenant = await tenantByAgentId(call.agent_id);
+  if (!tenant) return NextResponse.json({ error: "unknown agent" }, { status: 404 });
+
+  return withTenant(tenant, async () => {
   const channel = call.from_number ? "phone" : "web";
   await touchCall(callId, channel);
 
@@ -117,6 +123,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ received: true, ignored: payload.event });
+  });
 }
 
 export async function GET() {

@@ -4,12 +4,16 @@
  * This is the pipeline entry point. It verifies the signature before touching
  * anything, records the verification as the first pipeline step so the client
  * can see it happen, then dispatches to the handler.
+ *
+ * The agent id on the call decides whose workspace the call writes into. An
+ * agent nobody owns is refused before anything is written.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { logPipeline, touchCall } from "@/lib/audit";
 import { databaseWarning } from "@/lib/db";
 import { signatureRequired, verifyRetellSignature, type ToolRequest } from "@/lib/retell";
+import { tenantByAgentId, withTenant } from "@/lib/tenancy";
 import { runTool } from "@/lib/tools";
 
 export const runtime = "nodejs";
@@ -52,21 +56,28 @@ async function handle(request: NextRequest) {
     process.env.RETELL_API_KEY,
   );
 
-  if (!check.ok) {
-    if (signatureRequired()) {
-      await touchCall(callId);
-      await logPipeline(callId, "signature_verified", "error", check.reason);
-      return NextResponse.json({ error: "invalid signature" }, { status: 401 });
-    }
-    await touchCall(callId);
-    await logPipeline(callId, "signature_verified", "warn", `unsigned, allowed by demo setting: ${check.reason}`);
-  } else {
-    await touchCall(callId);
-    await logPipeline(callId, "signature_verified", "ok", `HMAC SHA256 matched, ${check.ageMs} ms old`, Date.now() - startedAt);
+  // Refuse an unsigned request before touching the database, unless the demo
+  // setting allows it. The signature is what proves the agent id is honest.
+  if (!check.ok && signatureRequired()) {
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  const result = await runTool(payload);
-  return NextResponse.json(result);
+  const tenant = await tenantByAgentId(payload.call.agent_id);
+  if (!tenant) {
+    return NextResponse.json({ error: "unknown agent", agent_id: payload.call.agent_id ?? null }, { status: 404 });
+  }
+
+  return withTenant(tenant, async () => {
+    await touchCall(callId, payload.call.from_number ? "phone" : "web");
+    if (!check.ok) {
+      await logPipeline(callId, "signature_verified", "warn", `unsigned, allowed by demo setting: ${check.reason}`);
+    } else {
+      await logPipeline(callId, "signature_verified", "ok", `HMAC SHA256 matched, ${check.ageMs} ms old`, Date.now() - startedAt);
+    }
+
+    const result = await runTool(payload);
+    return NextResponse.json(result);
+  });
 }
 
 /** Lets you confirm the endpoint is reachable from a browser. */

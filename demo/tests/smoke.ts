@@ -11,6 +11,7 @@
 
 import { rm } from "node:fs/promises";
 import { q, resetDemo } from "../lib/db";
+import { DEMO_TENANT_ID, addMembership, createTenant, getTenant, membershipsForUser, tenantByAgentId, withTenant } from "../lib/tenancy";
 import { runTool } from "../lib/tools";
 import type { ToolRequest } from "../lib/retell";
 
@@ -30,6 +31,50 @@ async function main() {
 
   heading("seed");
   await resetDemo();
+  const demo = await getTenant(DEMO_TENANT_ID);
+  if (!demo) throw new Error("bootstrap did not create the demo tenant");
+  if (!(await tenantByAgentId(undefined))) throw new Error("a call without an agent id must fall back to the demo tenant");
+  if (await tenantByAgentId("agent_nobody_owns")) throw new Error("an unknown agent must not resolve to any tenant");
+  await withTenant(demo, scenes);
+  await isolation();
+}
+
+/**
+ * A second practice must never see the demo's patients, and the demo must
+ * never see theirs. This is the one property tenancy exists for.
+ */
+async function isolation() {
+  heading("tenant isolation");
+  const acme = await createTenant({ name: "Acme Family Dentistry", retellAgentId: "agent_acme_test" });
+  if ((await tenantByAgentId("agent_acme_test"))?.id !== acme.id) throw new Error("the agent id must resolve to the tenant that owns it");
+
+  const [before] = await q<{ n: number }>(`select count(*)::int as n from phi_access_log where tenant_id = $1`, [DEMO_TENANT_ID]);
+
+  await withTenant(acme, async () => {
+    // Sarah Whitfield is a demo patient. Inside Acme she must be a stranger.
+    const who = (await runTool({ name: "find_patient", call: { call_id: "call_acme_001" }, args: { first_name: "Sarah", last_name: "Whitfield", date_of_birth: "1986-04-12" } })) as { status: string };
+    console.log("acme sees Sarah as:", who.status);
+    if (who.status === "found") throw new Error("a demo patient leaked into another tenant");
+    const [{ n }] = await q<{ n: number }>(`select count(*)::int as n from demo_appointments where tenant_id = $1`, [acme.id]);
+    if (n !== 0) throw new Error(`Acme should have an empty book, found ${n} appointments`);
+  });
+
+  const [after] = await q<{ n: number }>(`select count(*)::int as n from phi_access_log where tenant_id = $1`, [DEMO_TENANT_ID]);
+  if (after.n !== before.n) throw new Error("an Acme lookup was logged against the demo tenant");
+  const [acmeLog] = await q<{ n: number }>(`select count(*)::int as n from phi_access_log where tenant_id = $1`, [acme.id]);
+  if (acmeLog.n < 1) throw new Error("Acme's own lookup must be logged under Acme");
+
+  await addMembership({ tenantId: acme.id, email: "Owner@Acme.com", role: "owner" });
+  const mine = await membershipsForUser({ id: "user_clerk_123", email: "owner@acme.com" });
+  if (mine.length !== 1 || mine[0].clerk_user_id !== "user_clerk_123" || mine[0].invite_status !== "accepted") {
+    throw new Error("first sign-in must claim the membership created for that email");
+  }
+  if ((await membershipsForUser({ id: "user_clerk_999", email: "nobody@acme.com" })).length !== 0) throw new Error("an uninvited email must not get a workspace");
+  console.log("isolation and invitation binding hold");
+  console.log("\nAll checks passed.\n");
+}
+
+async function scenes() {
   const [{ patients, appointments }] = await q<{ patients: number; appointments: number }>(
     `select (select count(*)::int from demo_patients) as patients,
             (select count(*)::int from demo_appointments) as appointments`,
@@ -126,7 +171,6 @@ async function main() {
   const second = (await runTool(call("create_patient", { first_name: "Owen", last_name: "Marsh", date_of_birth: "1 Feb 1985", location: "northside" }))) as { patient_id: string };
   if (second.patient_id === made.patient_id) throw new Error("two new patients must not share a record");
 
-  console.log("\nAll checks passed.\n");
 }
 
 main().catch((err) => {
